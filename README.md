@@ -2,24 +2,11 @@
 
 Bookmark anything you or Claude said in a [Claude Code](https://claude.com/claude-code) conversation (or a tool call: a diff, a failing command), keep the bookmarks in a side pane, and **act on them**: ask Claude to explain one further, summarize it, find it in the code, verify it, or save it to Claude's memory. **Pin** the ones that matter and Claude keeps them in context, even after `/compact`.
 
-When Claude gives a long explanation, the useful part is usually a few lines: a gotcha, a decision, a command. This mod lets you mark those lines, find them again later, and turn them into something you keep.
-
-```
-3 bookmarks · 1 pinned here
-All  🐛 #gotcha 2  🧭 #decision 1
-
-▎▾ 🤖 Claude 3m · 📌                       ☐
-▎The cache misses because both keys include
-▎the request time, so no two requests share…
-▎🐛 #gotcha caching
-▎Ask   Explain · TL;DR · In code · Verify · Remember
-▎Card        Unpin · Copy · Jump · Group · Color · ✕
-
-▎▸ 🙋 You 12m                              ☐
-▎Why does the second call miss the cache?
-```
+<!-- Demo GIF goes here: ![Bookmarking a reply and asking Claude to explain it](docs/demo.gif) -->
 
 ## Install
+
+Needs Claude Code 2.1.301 or later. Check with `claude --version`.
 
 At the prompt of a Claude Code terminal session:
 
@@ -36,6 +23,25 @@ claude plugin install bookmarks --marketplace thrishma/claude-mod-bookmarks
 ```
 
 In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `thrishma/claude-mod-bookmarks`, then **Add plugin**.
+
+## Why
+
+When Claude gives a long explanation, the useful part is usually a few lines: a gotcha, a decision, a command. This mod lets you mark those lines, find them again later, and turn them into something you keep.
+
+```
+3 bookmarks · 1 pinned here
+All  🐛 #gotcha 2  🧭 #decision 1
+
+▎▾ 🤖 Claude 3m · 📌                       ☐
+▎The cache misses because both keys include
+▎the request time, so no two requests share…
+▎🐛 #gotcha caching
+▎Ask   Explain · TL;DR · In code · Verify · Remember
+▎Card        Unpin · Copy · Jump · Group · Color · ✕
+
+▎▸ 🙋 You 12m                              ☐
+▎Why does the second call miss the cache?
+```
 
 ## Bookmarking
 
@@ -128,3 +134,7 @@ claude --plugin-dir .
 ```
 
 The hooks module is `hooks/register.tsx`; tests are in `tests/`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
