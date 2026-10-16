@@ -528,6 +528,7 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = elements
     // Mobile has no text field: grouping there is /bm-group.
     const Input = 'Input' in elements ? elements.Input : undefined
+    const Select = 'Select' in elements ? elements.Select : undefined
     const all = await read($, list)
     const active = await read($, filter)
     const picked = await read($, selected)
@@ -572,45 +573,95 @@ export const register: Register = (on, options) => {
     const pickFilter = (tag: string) => update($, filter, () => tag)
     const toggleOne = (id: string) =>
       update($, selected, ids => ((ids ?? []).includes(id) ? (ids ?? []).filter(x => x !== id) : [...(ids ?? []), id]))
-    const toggleEditing = (what: string) => update($, editing, now => (now === what ? '' : what))
+    // `editing` names the open field; a trailing NEW_NAME means its dropdown gave way to typing a new name.
+    const NEW_NAME = '|new'
+    const toggleEditing = (what: string) => update($, editing, now => (now === what || now === what + NEW_NAME ? '' : what))
     const stopEditing = () => update($, editing, () => '')
+    const isEditing = (what: string) => naming === what || naming === what + NEW_NAME
 
-    // The field for a group name, with the existing groups one click away and a way out.
-    const groupEditor = (key: string, current: string, apply: (name: string) => Promise<unknown>) => {
+    /**
+     * Where a group name is chosen. With groups to choose from, a dropdown of them, `+ New group…` and
+     * `Ungroup`; a text field only for a new name, for a rename, or before any group exists. Where the
+     * surface has neither (mobile), the groups as buttons.
+     */
+    const groupEditor = (
+      what: string,
+      key: string,
+      current: string,
+      mode: 'pick' | 'rename',
+      apply: (name: string) => Promise<unknown>,
+    ) => {
       const choose = async (name: string) => {
         await apply(groupName(name))
         await stopEditing()
       }
-      return (
-        <Box key={key} flexDirection="column" paddingLeft={1}>
-          {Input && (
+      const others = groups.filter(name => name !== current)
+      const isTyping = mode === 'rename' || others.length === 0 || naming === what + NEW_NAME
+      const cancel = (
+        <Button key={`${key}-cancel`} plain onPress={stopEditing}>
+          <Text dimColor>Cancel</Text>
+        </Button>
+      )
+
+      if (isTyping && Input) {
+        return (
+          <Box key={key} flexDirection="column" paddingLeft={1}>
             <Input
               key={`${key}-name`}
-              label="Group "
-              placeholder={groups.length > 0 ? `e.g. ${groups[0]}` : 'e.g. Auth refactor'}
-              value={current}
+              label={mode === 'rename' ? 'Rename ' : 'New group '}
+              placeholder="a name, e.g. Auth refactor"
+              value={mode === 'rename' ? current : ''}
               submitLabel="save"
               autoFocus
               onSubmit={value => void choose(value)}
             />
-          )}
-          <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-            {groups
-              .filter(name => name !== current)
-              .map(name => (
-                <Button key={`${key}-to-${name}`} plain onPress={() => choose(name)}>
-                  <Text color="cyan">{name}</Text>
+            <Box flexDirection="row" columnGap={2}>
+              {mode === 'pick' && others.length > 0 && (
+                <Button key={`${key}-back`} plain onPress={() => update($, editing, () => what)}>
+                  <Text dimColor>Pick an existing group</Text>
                 </Button>
-              ))}
-            {current !== '' && (
-              <Button key={`${key}-ungroup`} plain onPress={() => choose('')}>
-                <Text dimColor>Ungroup</Text>
-              </Button>
-            )}
-            <Button key={`${key}-cancel`} plain onPress={stopEditing}>
-              <Text dimColor>Cancel</Text>
-            </Button>
+              )}
+              {cancel}
+            </Box>
           </Box>
+        )
+      }
+
+      if (Select) {
+        return (
+          <Box key={key} flexDirection="column" paddingLeft={1}>
+            <Select
+              key={`${key}-pick`}
+              label="Group "
+              autoFocus
+              options={[
+                ...others.map(name => ({ value: `g:${name}`, label: name })),
+                { value: 'new', label: '+ New group…' },
+                ...(current !== '' ? [{ value: 'none', label: 'Ungroup' }] : []),
+              ]}
+              onSelect={value => {
+                if (value === 'new') void update($, editing, () => what + NEW_NAME)
+                else void choose(value === 'none' ? '' : value.slice(2))
+              }}
+            />
+            <Box flexDirection="row">{cancel}</Box>
+          </Box>
+        )
+      }
+
+      return (
+        <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={2} paddingLeft={1}>
+          {others.map(name => (
+            <Button key={`${key}-to-${name}`} plain onPress={() => choose(name)}>
+              <Text color="cyan">{name}</Text>
+            </Button>
+          ))}
+          {current !== '' && (
+            <Button key={`${key}-ungroup`} plain onPress={() => choose('')}>
+              <Text dimColor>Ungroup</Text>
+            </Button>
+          )}
+          {cancel}
         </Box>
       )
     }
@@ -795,8 +846,8 @@ export const register: Register = (on, options) => {
                   },
                 },
               ])}
-              {naming === `group:${b.id}` &&
-                groupEditor(`edit-${b.id}`, b.group ?? '', name =>
+              {isEditing(`group:${b.id}`) &&
+                groupEditor(`group:${b.id}`, `edit-${b.id}`, b.group ?? '', 'pick', name =>
                   save($, all => all.map(x => (x.id === b.id ? withGroup(x, name) : x))),
                 )}
             </Box>
@@ -831,8 +882,8 @@ export const register: Register = (on, options) => {
               </Button>
             )}
           </Box>
-          {naming === `rename:${name}` &&
-            groupEditor(`rename-${name}-editor`, name, renamed =>
+          {isEditing(`rename:${name}`) &&
+            groupEditor(`rename:${name}`, `rename-${name}-editor`, name, 'rename', renamed =>
               save($, all => all.map(x => (x.group === name ? withGroup(x, renamed) : x))),
             )}
           {!isFolded && (
@@ -905,8 +956,8 @@ export const register: Register = (on, options) => {
                 <Text dimColor>Clear</Text>
               </Button>
             </Box>
-            {naming === 'selection' &&
-              groupEditor('selection-editor', '', async name => {
+            {isEditing('selection') &&
+              groupEditor('selection', 'selection-editor', '', 'pick', async name => {
                 const ids = chosen.map(b => b.id)
                 await save($, all => all.map(x => (ids.includes(x.id) ? withGroup(x, name) : x)))
                 await update($, selected, () => [])

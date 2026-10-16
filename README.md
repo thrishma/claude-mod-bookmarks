@@ -76,7 +76,7 @@ Filter chips at the top of the pane (`All  🐛 #gotcha  🧭 #decision …`) sh
 
 Put related bookmarks under a heading, like "Auth refactor" or "Gotchas":
 
-- **Card › Group** on an open card asks for a name. Your existing groups are listed below the field, one click each; **Ungroup** takes the card out.
+- **Card › Group** on an open card opens a dropdown of your groups: pick one with the arrows and Enter. **+ New group…** asks for a name (the first group always does), and **Ungroup** takes the card out. On mobile, where there is no dropdown, the groups are buttons.
 - **☐** a few cards, then **Group** on the selection line, moves them all at once.
 - Click a heading to fold it (▸) or unfold it (▾). **Rename** beside it renames the group for every card in it.
 - Cards with no group sit under **Ungrouped** at the bottom. Until you make your first group the pane is a plain list, with no headings.
