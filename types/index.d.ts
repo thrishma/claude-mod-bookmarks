@@ -13,6 +13,8 @@ export type Bookmark = {
   savedAt: number
   /** The transcript row it came from, when bookmarked from a mouse selection: what Jump scrolls to. */
   rowId?: string
+  /** The group it sits under in the pane; absent for Ungrouped. */
+  group?: string
   /** Its highlight color, one of the palette's; absent on bookmarks saved before colors. */
   color?: string
 }
@@ -33,8 +35,17 @@ declare module 'claude-code' {
   interface PluginState {
     /**
      * `filter` is the tag the pane shows ('' for all); `selected` the ids checked for Ask;
-     * `expanded` the card showing its actions ('' for the newest).
+     * `expanded` the card showing its actions ('' for the newest); `collapsed` the group headings
+     * folded shut; `editing` the open name field: `group:<bookmark id>`, `selection` or `rename:<group>`.
      */
-    bookmarks: { list: Bookmark[]; filter: string; selected: string[]; expanded: string; busy: BusyAsk[] }
+    bookmarks: {
+      list: Bookmark[]
+      filter: string
+      selected: string[]
+      expanded: string
+      busy: BusyAsk[]
+      collapsed: string[]
+      editing: string
+    }
   }
 }

@@ -275,8 +275,8 @@ test('the open card labels its two rows of actions and separates them', async ($
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
   expect(await pane.find({ type: 'Text', text: 'Ask' })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: 'Card' })).toBeDefined()
-  // Five asks and four card actions (no Jump without a row): 4 + 3 separators.
-  expect(await pane.findAll({ type: 'Text', text: '·' })).toHaveLength(7)
+  // Five asks and five card actions (Pin, Copy, Group, Color, ✕; no Jump without a row): 4 + 4 separators.
+  expect(await pane.findAll({ type: 'Text', text: '·' })).toHaveLength(8)
   await pane.unmount()
 })
 
@@ -372,5 +372,80 @@ test('the selection line clears on the first click, so a group ask cannot go twi
   await pane.press({ key: 'group-note' })
   expect(await pane.find({ type: 'Button', text: 'Design note' })).toBeUndefined()
   expect(seen.submitted).toHaveLength(1)
+  await pane.unmount()
+})
+
+test('groups: name one in the pane, fold it, rename it, and move a selection with /bm-group', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  // No groups yet: a flat list, no headings.
+  expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeUndefined()
+
+  // Group the open card (Claude's reply) from its Card row.
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: 'Group' }))?.key) })
+  const field = await pane.find({ type: 'Input' })
+  expect(field).toBeDefined()
+  await pane.input({ key: String(field?.key), text: '  Monads  ' })
+  expect(await pane.find({ type: 'Text', text: 'Monads' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /2 bookmarks · 1 group/ })).toBeDefined()
+  expect(await pane.find({ type: 'Input' })).toBeUndefined()
+
+  // Fold the group: its card hides, the other stays.
+  await pane.press({ key: 'fold-Monads' })
+  expect(await pane.find({ type: 'Text', text: /chain computations/ })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /monad\?/ })).toBeDefined()
+  await pane.press({ key: 'fold-Monads' })
+  expect(await pane.find({ type: 'Text', text: /chain computations/ })).toBeDefined()
+
+  // Rename the heading: every member follows.
+  await pane.press({ key: 'rename-Monads' })
+  await pane.input({ key: String((await pane.find({ type: 'Input' }))?.key), text: 'Functional' })
+  expect(await pane.find({ type: 'Text', text: 'Functional' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'Monads' })).toBeUndefined()
+
+  // Tick the ungrouped card and move it with the command: the Ungrouped heading goes.
+  await pane.press({ key: String((await pane.findAll({ type: 'Button', text: '☐' })).at(-1)?.key) })
+  const moved = (await runCommand($, { command: 'bm-group', args: 'Functional' })) as { text: string }
+  expect(moved.text).toBe('Moved 1 bookmark to "Functional".')
+  expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeUndefined()
+
+  // An empty name takes the newest out of its group.
+  expect(JSON.stringify(await runCommand($, { command: 'bm-group', args: '' }))).toContain('Took 1 bookmark out')
+  expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeDefined()
+  await pane.unmount()
+})
+
+test('a selection can be grouped from the pane, picking an existing group in one click', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm', args: '' })
+  await runCommand($, { command: 'bm-group', args: 'Reading' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  // Tick the ungrouped card, the last one drawn.
+  await pane.press({ key: String((await pane.findAll({ type: 'Button', text: '☐' })).at(-1)?.key) })
+  await pane.press({ key: 'group-move' })
+  await pane.press({ key: 'selection-editor-to-Reading' })
+  expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /selected/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('mobile has no text field: Group shows the existing groups to pick from', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'mobile', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm-group', args: 'Reading' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'mobile', props: PROPS as never })
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: 'Group' }))?.key) })
+  expect(await pane.find({ type: 'Button', text: 'Reading' })).toBeDefined()
   await pane.unmount()
 })

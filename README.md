@@ -49,6 +49,7 @@ In the desktop app, where `/plugin` does not run: click **+** next to the prompt
 | `/bm <words>` | The latest message containing those words |
 | `… -- #tag a note` | Adds tags and a note, e.g. `/bm -- #gotcha check the cache keys` |
 | `/bm-tag gotcha decision` | Tags your newest bookmark (handy after clicking ☆) |
+| `/bm-group Auth refactor` | Puts the ticked bookmarks, or your newest, in a group. No name takes them out. |
 | `/bookmarks` | Opens the pane |
 
 Bookmarked messages get a colored border in the conversation, matching their card in the pane.
@@ -65,15 +66,39 @@ Click anywhere on a card (▸) to open it. The open card (the newest, at first) 
 - **Pin**: keeps the bookmark in Claude's system prompt for this project, so it survives `/compact` and long sessions. Use it for decisions and constraints ("we chose X because Y", "never touch table Z"). The pane shows how many are pinned; **Unpin** takes it back out.
 - **Copy**: copies a tool call's command (or file path), else the first code block, else the text.
 - **Jump**: scrolls the conversation back to the message.
+- **Group**: puts the card in a group (see below).
 - **Color**: cycles the card's and the message's highlight color.
 - **✕** (Remove): deletes the bookmark.
 
 Filter chips at the top of the pane (`All  🐛 #gotcha  🧭 #decision …`) show one tag at a time. Some tags get an emoji: `#gotcha` 🐛, `#bug` 🐞, `#decision` 🧭, `#todo` 📝, `#idea` 💡, `#question` ❓, `#learn` 🎓, `#perf` 🚀, `#security` 🔒, `#fix` 🩹.
 
+### Groups
+
+Put related bookmarks under a heading, like "Auth refactor" or "Gotchas":
+
+- **Card › Group** on an open card asks for a name. Your existing groups are listed below the field, one click each; **Ungroup** takes the card out.
+- **☐** a few cards, then **Group** on the selection line, moves them all at once.
+- Click a heading to fold it (▸) or unfold it (▾). **Rename** beside it renames the group for every card in it.
+- Cards with no group sit under **Ungrouped** at the bottom. Until you make your first group the pane is a plain list, with no headings.
+
+Groups and tags work together: a card sits in one group, can carry any number of tags, and the tag chips filter inside every group.
+
+```
+2 bookmarks · 1 group
+▾ Auth refactor  1                    Rename
+  ▎▾ 🤖 Claude 2h                          ☐
+  ▎Tokens are refreshed in the middleware…
+
+▾ Ungrouped  1
+  ▎▸ 🙋 You 1h                             ☐
+  ▎Why does the cookie expire after an hour?
+```
+
 ### Asking about several at once
 
 Tick **☐** on a few cards and a line appears at the top of the pane:
 
+- **Group**: moves them into a group.
 - **Connect**: how they relate, what contradicts, what they add up to.
 - **Checklist**: an ordered checklist you can act on.
 - **Design note**: context, decisions and why, open questions, in markdown.
