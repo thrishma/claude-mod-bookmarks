@@ -12,8 +12,8 @@ All  🐛 #gotcha 2  🧭 #decision 1
 ▎The cache misses because both keys include
 ▎the request time, so no two requests share…
 ▎🐛 #gotcha caching
-▎Ask  Explain · TL;DR · In code · Verify · Remember
-▎Card Unpin · Copy · Jump · Color · Remove
+▎Ask   Explain · TL;DR · In code · Verify · Remember
+▎Card            Unpin · Copy · Jump · Color · Remove
 
 ▎▸ 🙋 You 12m                              ☐
 ▎Why does the second call miss the cache?

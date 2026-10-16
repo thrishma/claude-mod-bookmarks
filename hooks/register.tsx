@@ -551,7 +551,7 @@ export const register: Register = (on, options) => {
           // The whole card (header, text, note) opens it.
           const openCard = () => update($, expanded, () => b.id)
 
-          // One labelled row of actions, the card's bar running down beside it: `Ask  Explain · TL;DR · …`.
+          // One labelled row of actions, the card's bar running down beside it, the actions set to the right edge.
           const actionRow = (
             key: string,
             label: string,
@@ -567,7 +567,7 @@ export const register: Register = (on, options) => {
               <Box width={5} flexShrink={0}>
                 <Text dimColor>{label}</Text>
               </Box>
-              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+              <Box flexDirection="row" flexWrap="wrap" flexGrow={1} justifyContent="flex-end" columnGap={1}>
                 {items.flatMap((item, i) => [
                   ...(i > 0 ? [<Text key={`${item.key}-sep`} dimColor>·</Text>] : []),
                   <Button key={item.key} plain onPress={item.onPress}>
