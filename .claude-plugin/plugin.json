@@ -1,6 +1,6 @@
 {
   "name": "bookmarks",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bookmark what you or Claude said, see them in a side pane, and act on them: explain, TL;DR, find in code, verify, remember",
   "author": {
     "name": "thrishma",
@@ -19,7 +19,7 @@
     "emoji": {
       "type": "boolean",
       "title": "Emoji",
-      "description": "Show emoji on the bookmarks pane, its buttons and toasts. Turn off if your terminal draws them badly.",
+      "description": "Mark who said what and some tags with emoji. Turn off if your terminal draws them badly.",
       "default": true
     }
   }

@@ -14,6 +14,8 @@ const SHOWN = 50
 const list = atom({ plugin: 'bookmarks', key: 'list' } as const, [])
 const filter = atom({ plugin: 'bookmarks', key: 'filter' } as const, '')
 const selected = atom({ plugin: 'bookmarks', key: 'selected' } as const, [])
+const expanded = atom({ plugin: 'bookmarks', key: 'expanded' } as const, '')
+const PREVIEW_LINES = 3
 // What pinned bookmarks may add to the system prompt, in all and each.
 const PIN_BUDGET = 12_000
 const PIN_EACH = 3_000
@@ -29,6 +31,29 @@ const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()
 
 // The screen shows rendered markdown, the transcript holds the source: compare letters and digits only.
 const squash = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+
+// Word-wraps into at most `max` lines of `width`, the last ending in … when text is left over.
+const wrapLines = (text: string, width: number, max: number) => {
+  const lines: string[] = []
+  let line = ''
+  for (const word of oneLine(text).split(' ')) {
+    const next = line ? `${line} ${word}` : word
+    if (next.length <= width) {
+      line = next
+      continue
+    }
+    if (line) lines.push(line)
+    line = word.length > width ? word.slice(0, width) : word
+    if (lines.length === max) break
+  }
+  if (line && lines.length < max) lines.push(line)
+  const isCut = lines.join(' ').length < oneLine(text).length
+  if (isCut && lines.length > 0) {
+    const last = lines.length - 1
+    lines[last] = `${(lines[last] ?? '').slice(0, Math.max(0, width - 1))}…`
+  }
+  return lines.slice(0, max)
+}
 
 const clip = (text: string, max: number) => {
   const flat = oneLine(text)
@@ -116,27 +141,22 @@ const marks = (b: Bookmark, rowId: string, rowKey: string) => {
 const ASKS = {
   explain: {
     label: 'Explain',
-    emoji: '💡',
     ask: 'Explain it further: go deeper, give an example, and say what I should take away from it.',
   },
   tldr: {
     label: 'TL;DR',
-    emoji: '⚡',
     ask: 'Give me the TL;DR: at most 3 short bullets, the point first. No preamble.',
   },
   code: {
     label: 'In code',
-    emoji: '🔍',
     ask: 'Show me where this lives in the code. Read the repo (do not guess) and point me to the exact places as file:line, one line each on why it matters. If it is not about this codebase, say so.',
   },
   verify: {
     label: 'Verify',
-    emoji: '✅',
     ask: 'Verify this before I rely on it. Check each claim against the actual code, docs or state, and say which hold, which do not and which you could not check, with the evidence. Do not change anything.',
   },
   remember: {
     label: 'Remember',
-    emoji: '🧠',
     ask: 'Save the durable lesson in this to your persistent memory, following your memory instructions: check for an existing memory to update first, and include the why and how to apply. If it only matters to this conversation, tell me that instead of saving it.',
   },
 } as const
@@ -182,17 +202,14 @@ const askPrompt = (b: Bookmark, kind: Ask) => {
 const GROUP_ASKS = {
   connect: {
     label: 'Connect',
-    emoji: '🔗',
     ask: 'How do these relate? Find the common thread, anything that contradicts, and what they add up to.',
   },
   checklist: {
     label: 'Checklist',
-    emoji: '📝',
     ask: 'Turn these into a concrete, ordered checklist I can act on. Mark anything you would verify first.',
   },
   note: {
     label: 'Design note',
-    emoji: '📐',
     ask: 'Write a short design note from these, in markdown: context, the decisions and why, and open questions.',
   },
 } as const
@@ -431,20 +448,25 @@ export const register: Register = (on, options) => {
     const all = await read($, list)
     const active = await read($, filter)
     const picked = await read($, selected)
-    const cols = Math.max(20, (e.props.bodyColumns ?? e.viewport?.columns ?? 40) - 4)
+    const open = await read($, expanded)
+    const width = Math.max(20, (e.props.bodyColumns ?? e.viewport?.columns ?? 40) - 3)
     const here = await $.session.cwd()
     const now = await $.clock.now()
 
     if (all.length === 0) {
       return (
-        <Box flexDirection="column">
-          <Text dimColor>{show(fun, '✨', 'No bookmarks yet.')}</Text>
-          <Text dimColor>Click ☆ on a message or tool call,</Text>
-          <Text dimColor>or highlight text, then /bm</Text>
-          <Text dimColor>/bm — Claude's last reply</Text>
-          <Text dimColor>/bm me — your last prompt</Text>
-          <Text dimColor>/bm -- #tag note — with a tag</Text>
-          <Text dimColor>/bm-tag gotcha — tag the newest</Text>
+        <Box flexDirection="column" rowGap={1}>
+          <Text bold>{show(fun, '✨', 'No bookmarks yet')}</Text>
+          <Box flexDirection="column">
+            <Text dimColor>Hover a message or tool call and click ☆,</Text>
+            <Text dimColor>or highlight text and type /bm.</Text>
+          </Box>
+          <Box flexDirection="column">
+            <Text dimColor>/bm          Claude's last reply</Text>
+            <Text dimColor>/bm me       your last message</Text>
+            <Text dimColor>/bm -- #tag  with a tag or note</Text>
+            <Text dimColor>/bm-tag tag  tag the newest</Text>
+          </Box>
         </Box>
       )
     }
@@ -455,138 +477,183 @@ export const register: Register = (on, options) => {
     const current = tags.includes(active) ? active : ''
     const matching = current === '' ? all : all.filter(b => tagsOf(b).includes(current))
     const shown = [...matching].reverse().slice(0, SHOWN)
+    const openId = shown.some(b => b.id === open) ? open : (shown[0]?.id ?? '')
     const chosen = all.filter(b => picked.includes(b.id))
     const pins = all.filter(b => b.pinned && b.cwd === here).length
     const pickFilter = (tag: string) => update($, filter, () => tag)
     const toggleOne = (id: string) =>
       update($, selected, ids => ((ids ?? []).includes(id) ? (ids ?? []).filter(x => x !== id) : [...(ids ?? []), id]))
 
+    const summary = [`${all.length} bookmark${all.length === 1 ? '' : 's'}`, ...(pins > 0 ? [`${pins} pinned here`] : [])].join(' · ')
+
     return (
-      <Box flexDirection="column">
-        {tags.length > 0 && (
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1} marginBottom={1}>
-            <Button key="filter-all" plain onPress={() => pickFilter('')}>
-              <Text bold={current === ''} color={current === '' ? 'cyan' : undefined} dimColor={current !== ''}>
-                {show(fun, '📚', 'All')} {all.length}
-              </Text>
-            </Button>
-            {tags.map(t => (
-              <Button key={`filter-${t}`} plain onPress={() => pickFilter(t)}>
-                <Text bold={current === t} color={current === t ? 'cyan' : undefined} dimColor={current !== t}>
-                  {tagLabel(fun, t)} {counts.get(t) ?? 0}
+      <Box flexDirection="column" rowGap={1}>
+        <Box flexDirection="column">
+          <Text dimColor>{summary}</Text>
+          {tags.length > 0 && (
+            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+              <Button key="filter-all" plain onPress={() => pickFilter('')}>
+                <Text bold={current === ''} underline={current === ''} dimColor={current !== ''}>
+                  All
                 </Text>
               </Button>
-            ))}
-          </Box>
-        )}
-        {pins > 0 && (
-          <Text dimColor>
-            {show(fun, '📌', `${pins} pinned in Claude's context here`)}
-          </Text>
-        )}
-        {chosen.length > 0 && (
-          <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-            <Text bold color="cyan">
-              {show(fun, '🧺', `${chosen.length} selected — ask about them`)}
-            </Text>
-            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-              {(Object.keys(GROUP_ASKS) as GroupAsk[]).map(kind => (
-                <Button
-                  key={`group-${kind}`}
-                  label={show(fun, GROUP_ASKS[kind].emoji, GROUP_ASKS[kind].label)}
-                  {...(kind === 'connect' ? { variant: 'primary' as const } : {})}
-                  onPress={async () => {
-                    await $.prompt.submit({ text: groupPrompt(chosen, kind) })
-                    await update($, selected, () => [])
-                  }}
-                />
+              {tags.map(t => (
+                <Button key={`filter-${t}`} plain onPress={() => pickFilter(t)}>
+                  <Text bold={current === t} underline={current === t} dimColor={current !== t}>
+                    {tagLabel(fun, t)} {counts.get(t) ?? 0}
+                  </Text>
+                </Button>
               ))}
-              <Button key="group-clear" label="Clear" onPress={() => update($, selected, () => [])} />
             </Box>
+          )}
+        </Box>
+
+        {chosen.length > 0 && (
+          <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+            <Text bold color="cyan">
+              {chosen.length} selected
+            </Text>
+            {(Object.keys(GROUP_ASKS) as GroupAsk[]).map(kind => (
+              <Button
+                key={`group-${kind}`}
+                plain
+                onPress={async () => {
+                  await $.prompt.submit({ text: groupPrompt(chosen, kind) })
+                  await update($, selected, () => [])
+                }}
+              >
+                <Text color="cyan">{GROUP_ASKS[kind].label}</Text>
+              </Button>
+            ))}
+            <Button key="group-clear" plain onPress={() => update($, selected, () => [])}>
+              <Text dimColor>Clear</Text>
+            </Button>
           </Box>
         )}
+
         {shown.map(b => {
+          const color = colorOf(b)
           const isPicked = picked.includes(b.id)
+          const isOpen = b.id === openId
+          const lines = wrapLines(b.text, width, isOpen ? PREVIEW_LINES * 2 : PREVIEW_LINES)
+          const meta = [
+            ago(now, b.savedAt),
+            ...(b.cwd !== here ? [b.cwd.split('/').pop() ?? ''] : []),
+            ...(b.pinned ? [fun ? '📌' : 'pinned'] : []),
+          ].join(' · ')
+          const bar = (key: string, body: RenderElement) => (
+            <Box key={key} flexDirection="row">
+              <Text color={color}>▎</Text>
+              {body}
+            </Box>
+          )
+
           return (
-            <Box key={b.id} flexDirection="column" borderStyle="round" borderColor={colorOf(b)} paddingX={1}>
-              <Box flexDirection="row" columnGap={1}>
+            <Box key={b.id} flexDirection="column">
+              <Box flexDirection="row" justifyContent="space-between">
+                <Box flexDirection="row">
+                  <Text color={color}>▎</Text>
+                  <Button key={`open-${b.id}`} plain onPress={() => update($, expanded, () => b.id)}>
+                    <Text bold color={color}>
+                      {labelOf(b, fun)}
+                    </Text>
+                    <Text dimColor> {meta}</Text>
+                  </Button>
+                </Box>
                 <Button key={`pick-${b.id}`} plain onPress={() => toggleOne(b.id)}>
                   <Text color={isPicked ? 'cyan' : undefined} dimColor={!isPicked}>
                     {isPicked ? '☑' : '☐'}
                   </Text>
                 </Button>
-                <Text bold color={colorOf(b)}>
-                  {labelOf(b, fun)}
-                  <Text dimColor>
-                    {' '}· {ago(now, b.savedAt)}
-                    {b.cwd !== here ? ` · ${b.cwd.split('/').pop()}` : ''}
-                    {b.pinned ? (fun ? ' · 📌' : ' · pinned') : ''}
-                  </Text>
-                </Text>
               </Box>
-              <Text>{clip(b.text, cols * 2)}</Text>
-              {b.note !== '' && <Text dimColor italic>✎ {clip(b.note, cols)}</Text>}
-              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-                {(Object.keys(ASKS) as Ask[]).map(kind => (
-                  <Button
-                    key={`${kind}-${b.id}`}
-                    label={show(fun, ASKS[kind].emoji, ASKS[kind].label)}
-                    {...(kind === 'explain' ? { variant: 'primary' as const } : {})}
-                    onPress={() => void $.prompt.submit({ text: askPrompt(b, kind) })}
-                  />
-                ))}
-              </Box>
-              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-                <Button
-                  key={`pin-${b.id}`}
-                  label={show(fun, '📌', b.pinned ? 'Unpin' : 'Pin')}
-                  onPress={async () => {
-                    await save($, all => all.map(x => (x.id === b.id ? { ...x, pinned: !x.pinned } : x)))
-                    $.ui.invalidate('prompt.section')
-                    $.ui.toast(show(fun, '📌', b.pinned ? 'Unpinned' : 'Pinned: Claude keeps it in context in this project'))
-                  }}
-                />
-                <Button
-                  key={`copy-${b.id}`}
-                  label={show(fun, '📋', 'Copy')}
-                  onPress={async press => {
-                    const done = await $.ui.copy({ text: copyTextOf(b), surface: press.surface })
-                    $.ui.toast(done.isCopied ? show(fun, '📋', 'Copied') : `Couldn't copy: ${done.reason}`)
-                  }}
-                />
-                {b.rowId !== undefined && (
-                  <Button
-                    key={`jump-${b.id}`}
-                    label={show(fun, '🎯', 'Jump')}
-                    onPress={async () => {
-                      const moved = await $.ui.scroll({ to: { requestId: b.rowId ?? '' } }).catch(() => ({ deny: 'not supported here' }))
-                      if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
-                    }}
-                  />
+              {lines.map((line, i) => bar(`line-${b.id}-${i}`, <Text wrap="truncate-end">{line}</Text>))}
+              {b.note !== '' &&
+                bar(
+                  `note-${b.id}`,
+                  <Text dimColor italic wrap="truncate-end">
+                    {tagsOf(b).reduce((text, t) => text.replace(t, tagLabel(fun, t)), b.note)}
+                  </Text>,
                 )}
-                <Button
-                  key={`color-${b.id}`}
-                  label={show(fun, '🎨', 'Color')}
-                  onPress={async () => {
-                    await save($, all =>
-                      all.map(x => {
-                        if (x.id !== b.id) return x
-                        const at = PALETTE.indexOf(colorOf(x) as (typeof PALETTE)[number])
-                        return { ...x, color: PALETTE[(at + 1) % PALETTE.length] ?? 'yellow' }
-                      }),
-                    )
-                  }}
-                />
-                <Button
-                  key={`remove-${b.id}`}
-                  label={show(fun, '❌', 'Remove')}
-                  onPress={async () => {
-                    await save($, list => list.filter(x => x.id !== b.id))
-                    await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))
-                    if (b.pinned) $.ui.invalidate('prompt.section')
-                  }}
-                />
-              </Box>
+              {isOpen && (
+                <Box flexDirection="column" paddingLeft={1} marginTop={1}>
+                  <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+                    {(Object.keys(ASKS) as Ask[]).map(kind => (
+                      <Button
+                        key={`${kind}-${b.id}`}
+                        plain
+                        onPress={() => void $.prompt.submit({ text: askPrompt(b, kind) })}
+                      >
+                        <Text color={kind === 'explain' ? color : undefined} bold={kind === 'explain'}>
+                          {ASKS[kind].label}
+                        </Text>
+                      </Button>
+                    ))}
+                  </Box>
+                  <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+                    <Button
+                      key={`pin-${b.id}`}
+                      plain
+                      onPress={async () => {
+                        await save($, all => all.map(x => (x.id === b.id ? { ...x, pinned: !x.pinned } : x)))
+                        $.ui.invalidate('prompt.section')
+                        $.ui.toast(show(fun, '📌', b.pinned ? 'Unpinned' : 'Pinned: Claude keeps it in context in this project'))
+                      }}
+                    >
+                      <Text dimColor>{b.pinned ? 'Unpin' : 'Pin'}</Text>
+                    </Button>
+                    <Button
+                      key={`copy-${b.id}`}
+                      plain
+                      onPress={async press => {
+                        const done = await $.ui.copy({ text: copyTextOf(b), surface: press.surface })
+                        $.ui.toast(done.isCopied ? show(fun, '📋', 'Copied') : `Couldn't copy: ${done.reason}`)
+                      }}
+                    >
+                      <Text dimColor>Copy</Text>
+                    </Button>
+                    {b.rowId !== undefined && (
+                      <Button
+                        key={`jump-${b.id}`}
+                        plain
+                        onPress={async () => {
+                          const moved = await $.ui.scroll({ to: { requestId: b.rowId ?? '' } }).catch(() => ({ deny: 'not supported here' }))
+                          if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
+                        }}
+                      >
+                        <Text dimColor>Jump</Text>
+                      </Button>
+                    )}
+                    <Button
+                      key={`color-${b.id}`}
+                      plain
+                      onPress={async () => {
+                        await save($, all =>
+                          all.map(x => {
+                            if (x.id !== b.id) return x
+                            const at = PALETTE.indexOf(colorOf(x) as (typeof PALETTE)[number])
+                            return { ...x, color: PALETTE[(at + 1) % PALETTE.length] ?? 'yellow' }
+                          }),
+                        )
+                      }}
+                    >
+                      <Text dimColor>Color</Text>
+                    </Button>
+                    <Button
+                      key={`remove-${b.id}`}
+                      plain
+                      onPress={async () => {
+                        await save($, list => list.filter(x => x.id !== b.id))
+                        await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))
+                        if (b.pinned) $.ui.invalidate('prompt.section')
+                      }}
+                    >
+                      <Text color="red" dimColor>
+                        Remove
+                      </Text>
+                    </Button>
+                  </Box>
+                </Box>
+              )}
             </Box>
           )
         })}

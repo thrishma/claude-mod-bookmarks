@@ -19,7 +19,10 @@ export type Bookmark = {
 
 declare module 'claude-code' {
   interface PluginState {
-    /** `filter` is the tag the pane shows ('' for all); `selected` the ids checked for Ask. */
-    bookmarks: { list: Bookmark[]; filter: string; selected: string[] }
+    /**
+     * `filter` is the tag the pane shows ('' for all); `selected` the ids checked for Ask;
+     * `expanded` the card showing its actions ('' for the newest).
+     */
+    bookmarks: { list: Bookmark[]; filter: string; selected: string[]; expanded: string }
   }
 }
