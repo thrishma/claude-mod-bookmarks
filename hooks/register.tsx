@@ -590,6 +590,8 @@ export const register: Register = (on, options) => {
       current: string,
       mode: 'pick' | 'rename',
       apply: (name: string) => Promise<unknown>,
+      // Whether Ungroup has anything to do: the card is in a group, or some ticked card is.
+      canUngroup = current !== '',
     ) => {
       const choose = async (name: string) => {
         await apply(groupName(name))
@@ -637,7 +639,7 @@ export const register: Register = (on, options) => {
               options={[
                 ...others.map(name => ({ value: `g:${name}`, label: name })),
                 { value: 'new', label: '+ New group…' },
-                ...(current !== '' ? [{ value: 'none', label: 'Ungroup' }] : []),
+                ...(canUngroup ? [{ value: 'none', label: 'Ungroup' }] : []),
               ]}
               onSelect={value => {
                 if (value === 'new') void update($, editing, () => what + NEW_NAME)
@@ -656,7 +658,7 @@ export const register: Register = (on, options) => {
               <Text color="cyan">{name}</Text>
             </Button>
           ))}
-          {current !== '' && (
+          {canUngroup && (
             <Button key={`${key}-ungroup`} plain onPress={() => choose('')}>
               <Text dimColor>Ungroup</Text>
             </Button>
@@ -961,7 +963,7 @@ export const register: Register = (on, options) => {
                 const ids = chosen.map(b => b.id)
                 await save($, all => all.map(x => (ids.includes(x.id) ? withGroup(x, name) : x)))
                 await update($, selected, () => [])
-              })}
+              }, chosen.some(b => b.group !== undefined))}
           </Box>
         )}
 

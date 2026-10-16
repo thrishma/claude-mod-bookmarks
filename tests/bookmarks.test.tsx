@@ -483,3 +483,21 @@ test('the dropdown offers + New group…, which opens a field, and Ungroup', asy
   expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeDefined()
   await pane.unmount()
 })
+
+test('the selection line offers Ungroup when a ticked card is in a group', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm-group', args: 'Reading' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  // Tick the grouped card (drawn first, under its heading) and open the selection's Group.
+  await pane.press({ key: String((await pane.findAll({ type: 'Button', text: '☐' }))[0]?.key) })
+  await pane.press({ key: 'group-move' })
+  const pick = await pane.find({ type: 'Select' })
+  expect(JSON.stringify(pick)).toContain('Ungroup')
+  await pane.select({ key: String(pick?.key), value: 'none' })
+  expect(await pane.find({ type: 'Text', text: 'Reading' })).toBeUndefined()
+  await pane.unmount()
+})
