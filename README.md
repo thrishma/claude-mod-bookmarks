@@ -8,9 +8,9 @@ When Claude gives a long explanation, the useful part is usually a few lines: a 
 ╭──────────────────────────────────★─╮     ╭─ Bookmarks ─────────────────────────╮
 │ ⏺ The cache misses because both    │     │ All 4 · #gotcha 2 · #decision 1     │
 │   keys include the request time…   │     │ ╭─────────────────────────────────╮ │
-╰────────────────────────────────────╯     │ │ ☐ ◆ Claude · 3m · 📌            │ │
+╰────────────────────────────────────╯     │ │ ☐ 🤖 Claude · 3m · 📌           │ │
                                            │ │ The cache misses because both…  │ │
-                                           │ │ ✎ #gotcha caching               │ │
+                                           │ │ ✎ 🐛 #gotcha caching            │ │
                                            │ │ [Explain] [TL;DR] [In code]     │ │
                                            │ │ [Verify] [Remember]             │ │
                                            │ │ [Pin] [Copy] [Jump] [Color] …   │ │
@@ -56,28 +56,30 @@ Bookmarked messages get a colored border in the conversation, matching their car
 
 Each card in the pane has:
 
-- **Explain**: Claude goes deeper, with an example and the takeaway.
-- **TL;DR**: at most 3 bullets, the point first.
-- **In code**: Claude reads the repo and points to the exact `file:line` places it is about.
-- **Verify**: Claude checks each claim against the actual code or state and says which hold, with evidence. It changes nothing.
-- **Remember**: Claude saves the lesson to its persistent memory (or tells you it is not worth keeping), so future sessions know it.
-- **Pin**: keeps the bookmark in Claude's system prompt for this project, so it survives `/compact` and long sessions. Use it for decisions and constraints ("we chose X because Y", "never touch table Z"). The pane shows how many are pinned; **Unpin** takes it back out.
-- **Copy**: copies a tool call's command (or file path), else the first code block, else the text.
-- **Jump**: scrolls the conversation back to the message.
-- **Color**: cycles the card's and the message's highlight color.
-- **Remove**: deletes the bookmark.
+- **💡 Explain**: Claude goes deeper, with an example and the takeaway.
+- **⚡ TL;DR**: at most 3 bullets, the point first.
+- **🔍 In code**: Claude reads the repo and points to the exact `file:line` places it is about.
+- **✅ Verify**: Claude checks each claim against the actual code or state and says which hold, with evidence. It changes nothing.
+- **🧠 Remember**: Claude saves the lesson to its persistent memory (or tells you it is not worth keeping), so future sessions know it.
+- **📌 Pin**: keeps the bookmark in Claude's system prompt for this project, so it survives `/compact` and long sessions. Use it for decisions and constraints ("we chose X because Y", "never touch table Z"). The pane shows how many are pinned; **Unpin** takes it back out.
+- **📋 Copy**: copies a tool call's command (or file path), else the first code block, else the text.
+- **🎯 Jump**: scrolls the conversation back to the message.
+- **🎨 Color**: cycles the card's and the message's highlight color.
+- **❌ Remove**: deletes the bookmark.
 
-Filter chips at the top of the pane (`All · #gotcha · #decision …`) show one tag at a time.
+Filter chips at the top of the pane (`📚 All · 🐛 #gotcha · 🧭 #decision …`) show one tag at a time. Some tags get an emoji: `#gotcha` 🐛, `#bug` 🐞, `#decision` 🧭, `#todo` 📝, `#idea` 💡, `#question` ❓, `#learn` 🎓, `#perf` 🚀, `#security` 🔒, `#fix` 🩹.
 
 ### Asking about several at once
 
 Tick **☐** on a few cards and a bar appears at the top of the pane:
 
-- **Connect**: how they relate, what contradicts, what they add up to.
-- **Checklist**: an ordered checklist you can act on.
-- **Design note**: context, decisions and why, open questions, in markdown.
+- **🔗 Connect**: how they relate, what contradicts, what they add up to.
+- **📝 Checklist**: an ordered checklist you can act on.
+- **📐 Design note**: context, decisions and why, open questions, in markdown.
 
 ## Good to know
+
+- **Emoji** are on by default. If your terminal draws them badly (misaligned rows, boxes), turn them off with the **Emoji** row for bookmarks in `/config`. The pane falls back to plain glyphs (◆ Claude, ● You, ▸ Bash).
 
 - **Fullscreen mode** is needed for clicking (☆, buttons, chips) and for bookmarking a mouse selection. Outside it, use the commands and the keyboard: `ctrl+x` then `tab` moves into the pane, `Tab` walks its buttons, `Enter` presses, `Esc` returns to the prompt.
 - **Where the pane goes:** a sidebar on the right when the terminal is fullscreen and at least 110 columns wide; otherwise above the prompt.

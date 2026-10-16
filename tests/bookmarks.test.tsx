@@ -179,7 +179,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       ['Verify', 'Verify this'],
       ['Remember', 'persistent memory'],
     ] as const) {
-      const button = await ui.find({ type: 'Button', text: label })
+      const button = await ui.find({ type: 'Button', text: new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) })
       await ui.press({ key: String(button?.key) })
       expect(submitted.at(-1)).toContain(words)
       expect(submitted.at(-1)).toContain('A monad is a way to chain computations.')
@@ -241,8 +241,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await runCommand($, { command: 'bm', args: '' })
 
     const pane = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
-    expect(await pane.find({ type: 'Text', text: /▸ Bash/ })).toBeDefined()
-    const cards = await pane.findAll({ type: 'Button', text: /^Copy$/ })
+    expect(await pane.find({ type: 'Text', text: /🔧 Bash/ })).toBeDefined()
+    const cards = await pane.findAll({ type: 'Button', text: /Copy$/ })
     expect(cards).toHaveLength(2)
 
     // Copy on the tool card copies the command, not the output. The newest card is first.
@@ -250,7 +250,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(copied.at(-1)).toBe('npm test -- --watch=false')
 
     // Pin it: the system prompt carries it, after the base section.
-    const pinButtons = await pane.findAll({ type: 'Button', text: /^Pin$/ })
+    const pinButtons = await pane.findAll({ type: 'Button', text: / Pin$/ })
     await pane.press({ key: String(pinButtons[1]?.key) })
     expect(await pane.find({ type: 'Text', text: /1 pinned/ })).toBeDefined()
     const composed = await $.prompt.compose(composeInput(surface))
@@ -269,11 +269,51 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ type: 'Text', text: /selected/ })).toBeUndefined()
 
     // Unpinned, it leaves the system prompt.
-    await pane.press({ key: String((await pane.find({ type: 'Button', text: /^Unpin$/ }))?.key) })
+    await pane.press({ key: String((await pane.find({ type: 'Button', text: /Unpin$/ }))?.key) })
     const after = await $.prompt.compose(composeInput(surface))
     expect(after.sections.map(x => x.id)).toEqual(['base'])
 
     await pane.unmount()
     await row.unmount()
+  })
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`emoji can be turned off on ${surface}`, { options: { emoji: false } }, async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_000_000 })
+    on('session.messages', () => ({ value: MESSAGES.map(m => ({ ...m, toolUses: [] })) }))
+    on('session.cwd', () => ({ value: '/work/demo' }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.toast', () => ({ value: undefined }))
+    on('command.register', (_$, e) => ({ value: { command: e.name } }))
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+    await $.session.start({ cwd: '/work/demo', surface, isInteractive: true })
+    await runCommand($, { command: 'bm', args: '-- #gotcha' })
+
+    const pane = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
+    expect(await pane.find({ type: 'Button', text: 'Explain' })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /◆ Claude/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /🐛|🤖|📚/ })).toBeUndefined()
+    await pane.unmount()
+  })
+
+  test(`emoji show by default on ${surface}`, async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_000_000 })
+    on('session.messages', () => ({ value: MESSAGES.map(m => ({ ...m, toolUses: [] })) }))
+    on('session.cwd', () => ({ value: '/work/demo' }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.toast', () => ({ value: undefined }))
+    on('command.register', (_$, e) => ({ value: { command: e.name } }))
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+    await $.session.start({ cwd: '/work/demo', surface, isInteractive: true })
+    await runCommand($, { command: 'bm', args: '-- #gotcha' })
+
+    const pane = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
+    expect(await pane.find({ type: 'Button', text: '💡 Explain' })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /🤖 Claude/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /🐛 #gotcha 1/ })).toBeDefined()
+    await pane.unmount()
   })
 }

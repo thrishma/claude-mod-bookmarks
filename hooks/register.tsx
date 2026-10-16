@@ -116,22 +116,27 @@ const marks = (b: Bookmark, rowId: string, rowKey: string) => {
 const ASKS = {
   explain: {
     label: 'Explain',
+    emoji: '💡',
     ask: 'Explain it further: go deeper, give an example, and say what I should take away from it.',
   },
   tldr: {
     label: 'TL;DR',
+    emoji: '⚡',
     ask: 'Give me the TL;DR: at most 3 short bullets, the point first. No preamble.',
   },
   code: {
     label: 'In code',
+    emoji: '🔍',
     ask: 'Show me where this lives in the code. Read the repo (do not guess) and point me to the exact places as file:line, one line each on why it matters. If it is not about this codebase, say so.',
   },
   verify: {
     label: 'Verify',
+    emoji: '✅',
     ask: 'Verify this before I rely on it. Check each claim against the actual code, docs or state, and say which hold, which do not and which you could not check, with the evidence. Do not change anything.',
   },
   remember: {
     label: 'Remember',
+    emoji: '🧠',
     ask: 'Save the durable lesson in this to your persistent memory, following your memory instructions: check for an existing memory to update first, and include the why and how to apply. If it only matters to this conversation, tell me that instead of saving it.',
   },
 } as const
@@ -141,7 +146,32 @@ type Ask = keyof typeof ASKS
 const whoOf = (b: Bookmark) =>
   b.role === 'assistant' ? 'you (Claude) said' : b.role === 'tool' ? `a ${b.tool ?? 'tool'} call produced` : 'I wrote'
 
-const labelOf = (b: Bookmark) => (b.role === 'assistant' ? '◆ Claude' : b.role === 'tool' ? `▸ ${b.tool ?? 'Tool'}` : '● You')
+// Emoji that draw as emoji without a variation selector, so terminals give them a steady two cells.
+const ROLE_EMOJI = { assistant: '🤖', user: '🙋', tool: '🔧' } as const
+
+const TAG_EMOJI: Readonly<Record<string, string>> = {
+  '#gotcha': '🐛',
+  '#bug': '🐞',
+  '#decision': '🧭',
+  '#todo': '📝',
+  '#idea': '💡',
+  '#question': '❓',
+  '#learn': '🎓',
+  '#perf': '🚀',
+  '#security': '🔒',
+  '#fix': '🩹',
+}
+
+// `fun` is the emoji setting: the plain glyphs stand in when it is off.
+const show = (fun: boolean, emoji: string, text: string) => (fun ? `${emoji} ${text}` : text)
+
+const labelOf = (b: Bookmark, fun: boolean) => {
+  const name = b.role === 'assistant' ? 'Claude' : b.role === 'tool' ? (b.tool ?? 'Tool') : 'You'
+  if (fun) return `${ROLE_EMOJI[b.role]} ${name}`
+  return `${b.role === 'assistant' ? '◆' : b.role === 'tool' ? '▸' : '●'} ${name}`
+}
+
+const tagLabel = (fun: boolean, tag: string) => (fun && TAG_EMOJI[tag] ? `${TAG_EMOJI[tag]} ${tag}` : tag)
 
 const askPrompt = (b: Bookmark, kind: Ask) => {
   const note = b.note ? `\n\nMy note on it: ${b.note}` : ''
@@ -152,14 +182,17 @@ const askPrompt = (b: Bookmark, kind: Ask) => {
 const GROUP_ASKS = {
   connect: {
     label: 'Connect',
+    emoji: '🔗',
     ask: 'How do these relate? Find the common thread, anything that contradicts, and what they add up to.',
   },
   checklist: {
     label: 'Checklist',
+    emoji: '📝',
     ask: 'Turn these into a concrete, ordered checklist I can act on. Mark anything you would verify first.',
   },
   note: {
     label: 'Design note',
+    emoji: '📐',
     ask: 'Write a short design note from these, in markdown: context, the decisions and why, and open questions.',
   },
 } as const
@@ -242,7 +275,8 @@ const star = async (
   role: Bookmark['role'],
   text: string,
   drawn: RenderElement,
-  tool?: { name: string; copy: string | undefined },
+  tool: { name: string; copy: string | undefined } | undefined,
+  fun: boolean,
 ) => {
   const all = await read($, list)
   const rowKey = squash(text)
@@ -252,7 +286,7 @@ const star = async (
   const toggle = async () => {
     if (isMarked) {
       await save($, bs => bs.filter(b => !marks(b, e.requestId, rowKey)))
-      $.ui.toast('Bookmark removed')
+      $.ui.toast(show(fun, '💨', 'Bookmark removed'))
       return
     }
     const now = await $.clock.now()
@@ -270,7 +304,7 @@ const star = async (
     }
     await save($, bs => [...bs, bookmark])
     void $.ui.open(OPEN)
-    $.ui.toast(tool ? `Bookmarked the ${tool.name} call` : `Bookmarked ${role === 'assistant' ? "Claude's" : 'your'} message`)
+    $.ui.toast(show(fun, '⭐', tool ? `Bookmarked the ${tool.name} call` : `Bookmarked ${role === 'assistant' ? "Claude's" : 'your'} message`))
   }
 
   return (
@@ -296,7 +330,9 @@ const star = async (
   )
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const fun = options.emoji !== false
+
   on('session.start', async ($, e, next) => {
     const held = await read($, list)
     if (held.length === 0) {
@@ -340,7 +376,7 @@ export const register: Register = on => {
     }
     await save($, all => [...all, bookmark])
     void $.ui.open(OPEN)
-    $.ui.toast(isSelection ? 'Bookmarked your selection' : `Bookmarked ${found.role === 'assistant' ? "Claude's" : 'your'} message`)
+    $.ui.toast(show(fun, '⭐', isSelection ? 'Bookmarked your selection' : `Bookmarked ${found.role === 'assistant' ? "Claude's" : 'your'} message`))
 
     return { text: `Bookmarked: "${clip(found.text, 80)}"` }
   })
@@ -367,20 +403,20 @@ export const register: Register = on => {
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const drawn = await next(e)
     if (!isBookmarkable(e.props.text)) return drawn
-    return star($, $.ui.resolve(e), e, 'assistant', e.props.text, drawn)
+    return star($, $.ui.resolve(e), e, 'assistant', e.props.text, drawn, undefined, fun)
   })
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const drawn = await next(e)
     if (e.props.origin.kind !== 'composer' || !isBookmarkable(e.props.text)) return drawn
-    return star($, $.ui.resolve(e), e, 'user', e.props.text, drawn)
+    return star($, $.ui.resolve(e), e, 'user', e.props.text, drawn, undefined, fun)
   })
 
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const drawn = await next(e)
     if (e.props.isRunning) return drawn
     const made = toolBookmark(e.props.tool, e.props.input, e.props.output)
-    return star($, $.ui.resolve(e), e, 'tool', made.text, drawn, { name: e.props.tool, copy: made.copy })
+    return star($, $.ui.resolve(e), e, 'tool', made.text, drawn, { name: e.props.tool, copy: made.copy }, fun)
   })
 
   on('prompt.compose', async ($, e, next) => {
@@ -402,7 +438,7 @@ export const register: Register = on => {
     if (all.length === 0) {
       return (
         <Box flexDirection="column">
-          <Text dimColor>No bookmarks yet.</Text>
+          <Text dimColor>{show(fun, '✨', 'No bookmarks yet.')}</Text>
           <Text dimColor>Click ☆ on a message or tool call,</Text>
           <Text dimColor>or highlight text, then /bm</Text>
           <Text dimColor>/bm — Claude's last reply</Text>
@@ -431,13 +467,13 @@ export const register: Register = on => {
           <Box flexDirection="row" flexWrap="wrap" columnGap={1} marginBottom={1}>
             <Button key="filter-all" plain onPress={() => pickFilter('')}>
               <Text bold={current === ''} color={current === '' ? 'cyan' : undefined} dimColor={current !== ''}>
-                All {all.length}
+                {show(fun, '📚', 'All')} {all.length}
               </Text>
             </Button>
             {tags.map(t => (
               <Button key={`filter-${t}`} plain onPress={() => pickFilter(t)}>
                 <Text bold={current === t} color={current === t ? 'cyan' : undefined} dimColor={current !== t}>
-                  {t} {counts.get(t) ?? 0}
+                  {tagLabel(fun, t)} {counts.get(t) ?? 0}
                 </Text>
               </Button>
             ))}
@@ -445,19 +481,19 @@ export const register: Register = on => {
         )}
         {pins > 0 && (
           <Text dimColor>
-            📌 {pins} pinned in Claude's context here
+            {show(fun, '📌', `${pins} pinned in Claude's context here`)}
           </Text>
         )}
         {chosen.length > 0 && (
           <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
             <Text bold color="cyan">
-              {chosen.length} selected — ask about them
+              {show(fun, '🧺', `${chosen.length} selected — ask about them`)}
             </Text>
             <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
               {(Object.keys(GROUP_ASKS) as GroupAsk[]).map(kind => (
                 <Button
                   key={`group-${kind}`}
-                  label={GROUP_ASKS[kind].label}
+                  label={show(fun, GROUP_ASKS[kind].emoji, GROUP_ASKS[kind].label)}
                   {...(kind === 'connect' ? { variant: 'primary' as const } : {})}
                   onPress={async () => {
                     await $.prompt.submit({ text: groupPrompt(chosen, kind) })
@@ -480,11 +516,11 @@ export const register: Register = on => {
                   </Text>
                 </Button>
                 <Text bold color={colorOf(b)}>
-                  {labelOf(b)}
+                  {labelOf(b, fun)}
                   <Text dimColor>
                     {' '}· {ago(now, b.savedAt)}
                     {b.cwd !== here ? ` · ${b.cwd.split('/').pop()}` : ''}
-                    {b.pinned ? ' · 📌' : ''}
+                    {b.pinned ? (fun ? ' · 📌' : ' · pinned') : ''}
                   </Text>
                 </Text>
               </Box>
@@ -494,7 +530,7 @@ export const register: Register = on => {
                 {(Object.keys(ASKS) as Ask[]).map(kind => (
                   <Button
                     key={`${kind}-${b.id}`}
-                    label={ASKS[kind].label}
+                    label={show(fun, ASKS[kind].emoji, ASKS[kind].label)}
                     {...(kind === 'explain' ? { variant: 'primary' as const } : {})}
                     onPress={() => void $.prompt.submit({ text: askPrompt(b, kind) })}
                   />
@@ -503,25 +539,25 @@ export const register: Register = on => {
               <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
                 <Button
                   key={`pin-${b.id}`}
-                  label={b.pinned ? 'Unpin' : 'Pin'}
+                  label={show(fun, '📌', b.pinned ? 'Unpin' : 'Pin')}
                   onPress={async () => {
                     await save($, all => all.map(x => (x.id === b.id ? { ...x, pinned: !x.pinned } : x)))
                     $.ui.invalidate('prompt.section')
-                    $.ui.toast(b.pinned ? 'Unpinned' : "Pinned: Claude keeps it in context in this project")
+                    $.ui.toast(show(fun, '📌', b.pinned ? 'Unpinned' : 'Pinned: Claude keeps it in context in this project'))
                   }}
                 />
                 <Button
                   key={`copy-${b.id}`}
-                  label="Copy"
+                  label={show(fun, '📋', 'Copy')}
                   onPress={async press => {
                     const done = await $.ui.copy({ text: copyTextOf(b), surface: press.surface })
-                    $.ui.toast(done.isCopied ? 'Copied' : `Couldn't copy: ${done.reason}`)
+                    $.ui.toast(done.isCopied ? show(fun, '📋', 'Copied') : `Couldn't copy: ${done.reason}`)
                   }}
                 />
                 {b.rowId !== undefined && (
                   <Button
                     key={`jump-${b.id}`}
-                    label="Jump"
+                    label={show(fun, '🎯', 'Jump')}
                     onPress={async () => {
                       const moved = await $.ui.scroll({ to: { requestId: b.rowId ?? '' } }).catch(() => ({ deny: 'not supported here' }))
                       if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
@@ -530,7 +566,7 @@ export const register: Register = on => {
                 )}
                 <Button
                   key={`color-${b.id}`}
-                  label="Color"
+                  label={show(fun, '🎨', 'Color')}
                   onPress={async () => {
                     await save($, all =>
                       all.map(x => {
@@ -543,7 +579,7 @@ export const register: Register = on => {
                 />
                 <Button
                   key={`remove-${b.id}`}
-                  label="Remove"
+                  label={show(fun, '❌', 'Remove')}
                   onPress={async () => {
                     await save($, list => list.filter(x => x.id !== b.id))
                     await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))
