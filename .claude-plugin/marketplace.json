@@ -1,0 +1,15 @@
+{
+  "name": "claude-mod-bookmarks",
+  "description": "Bookmarks for Claude Code: pin any message, then explain, summarize, verify or remember it",
+  "owner": {
+    "name": "thrishma",
+    "url": "https://github.com/thrishma"
+  },
+  "plugins": [
+    {
+      "name": "bookmarks",
+      "source": "./",
+      "description": "Bookmark any message in Claude Code and act on it: explain, TL;DR, find in code, verify, remember"
+    }
+  ]
+}

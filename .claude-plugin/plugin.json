@@ -1,0 +1,9 @@
+{
+  "name": "bookmarks",
+  "version": "0.1.0",
+  "description": "Bookmark what you or Claude said, see them in a side pane, and act on them: explain, TL;DR, find in code, verify, remember",
+  "author": { "name": "thrishma", "url": "https://github.com/thrishma" },
+  "repository": "https://github.com/thrishma/claude-mod-bookmarks",
+  "keywords": ["bookmarks", "pins", "highlights", "notes", "memory"],
+  "types": "./types/index.d.ts"
+}
