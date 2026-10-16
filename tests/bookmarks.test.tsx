@@ -452,7 +452,7 @@ test('mobile has no text field: Group shows the existing groups to pick from', a
   await pane.unmount()
 })
 
-test('the dropdown offers + New group…, which opens a field, and Ungroup', async ($, on) => {
+test('beside the dropdown, + New group opens a field and Ungroup takes the card out', async ($, on) => {
   world(on)
   await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
   await runCommand($, { command: 'bm', args: 'me' })
@@ -462,12 +462,10 @@ test('the dropdown offers + New group…, which opens a field, and Ungroup', asy
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
   // The newest (ungrouped) card is open: its Group shows the dropdown, no Ungroup since it has no group.
   await pane.press({ key: String((await pane.find({ type: 'Button', text: 'Group' }))?.key) })
-  const pick = await pane.find({ type: 'Select' })
-  expect(pick).toBeDefined()
-  expect(JSON.stringify(pick)).toContain('+ New group…')
-  expect(JSON.stringify(pick)).not.toContain('Ungroup')
+  expect(await pane.find({ type: 'Select' })).toBeDefined()
+  expect(await pane.find({ type: 'Button', text: /^Ungroup$/ })).toBeUndefined()
 
-  await pane.select({ key: String(pick?.key), value: 'new' })
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: '+ New group' }))?.key) })
   const field = await pane.find({ type: 'Input' })
   expect(field).toBeDefined()
   await pane.input({ key: String(field?.key), text: 'Answers' })
@@ -479,7 +477,7 @@ test('the dropdown offers + New group…, which opens a field, and Ungroup', asy
   const again = await pane.find({ type: 'Select' })
   expect(JSON.stringify(again)).toContain('Reading')
   expect(JSON.stringify(again)).not.toContain('g:Answers')
-  await pane.select({ key: String(again?.key), value: 'none' })
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: /^Ungroup$/ }))?.key) })
   expect(await pane.find({ type: 'Text', text: 'Ungrouped' })).toBeDefined()
   await pane.unmount()
 })
@@ -495,9 +493,22 @@ test('the selection line offers Ungroup when a ticked card is in a group', async
   // Tick the grouped card (drawn first, under its heading) and open the selection's Group.
   await pane.press({ key: String((await pane.findAll({ type: 'Button', text: '☐' }))[0]?.key) })
   await pane.press({ key: 'group-move' })
-  const pick = await pane.find({ type: 'Select' })
-  expect(JSON.stringify(pick)).toContain('Ungroup')
-  await pane.select({ key: String(pick?.key), value: 'none' })
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: /^Ungroup$/ }))?.key) })
   expect(await pane.find({ type: 'Text', text: 'Reading' })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('with one group, a card in it gets the name field and an Ungroup button', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: '' })
+  await runCommand($, { command: 'bm-group', args: 'Only' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: 'Group' }))?.key) })
+  // No other group to pick: straight to a name, with Ungroup beside it.
+  expect(await pane.find({ type: 'Input' })).toBeDefined()
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: /^Ungroup$/ }))?.key) })
+  expect(await pane.find({ type: 'Text', text: 'Only' })).toBeUndefined()
   await pane.unmount()
 })

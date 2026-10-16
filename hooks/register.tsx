@@ -580,9 +580,9 @@ export const register: Register = (on, options) => {
     const isEditing = (what: string) => naming === what || naming === what + NEW_NAME
 
     /**
-     * Where a group name is chosen. With groups to choose from, a dropdown of them, `+ New group…` and
-     * `Ungroup`; a text field only for a new name, for a rename, or before any group exists. Where the
-     * surface has neither (mobile), the groups as buttons.
+     * Where a group name is chosen. With groups to choose from, a dropdown of them; `+ New group`, `Ungroup`
+     * and `Cancel` as buttons beneath it. A text field only for a new name, for a rename, or when there is no
+     * other group to pick. Where the surface has neither (mobile), the groups as buttons.
      */
     const groupEditor = (
       what: string,
@@ -599,6 +599,14 @@ export const register: Register = (on, options) => {
       }
       const others = groups.filter(name => name !== current)
       const isTyping = mode === 'rename' || others.length === 0 || naming === what + NEW_NAME
+      // Always in sight beneath the field or dropdown: a terminal dropdown shows only its current option.
+      const ungroup = canUngroup && (
+        <Button key={`${key}-ungroup`} plain onPress={() => choose('')}>
+          <Text color="red" dimColor>
+            Ungroup
+          </Text>
+        </Button>
+      )
       const cancel = (
         <Button key={`${key}-cancel`} plain onPress={stopEditing}>
           <Text dimColor>Cancel</Text>
@@ -623,6 +631,7 @@ export const register: Register = (on, options) => {
                   <Text dimColor>Pick an existing group</Text>
                 </Button>
               )}
+              {mode === 'pick' && ungroup}
               {cancel}
             </Box>
           </Box>
@@ -636,17 +645,16 @@ export const register: Register = (on, options) => {
               key={`${key}-pick`}
               label="Group "
               autoFocus
-              options={[
-                ...others.map(name => ({ value: `g:${name}`, label: name })),
-                { value: 'new', label: '+ New group…' },
-                ...(canUngroup ? [{ value: 'none', label: 'Ungroup' }] : []),
-              ]}
-              onSelect={value => {
-                if (value === 'new') void update($, editing, () => what + NEW_NAME)
-                else void choose(value === 'none' ? '' : value.slice(2))
-              }}
+              options={others.map(name => ({ value: `g:${name}`, label: name }))}
+              onSelect={value => void choose(value.slice(2))}
             />
-            <Box flexDirection="row">{cancel}</Box>
+            <Box flexDirection="row" columnGap={2}>
+              <Button key={`${key}-new`} plain onPress={() => update($, editing, () => what + NEW_NAME)}>
+                <Text color="cyan">+ New group</Text>
+              </Button>
+              {ungroup}
+              {cancel}
+            </Box>
           </Box>
         )
       }
@@ -658,11 +666,7 @@ export const register: Register = (on, options) => {
               <Text color="cyan">{name}</Text>
             </Button>
           ))}
-          {canUngroup && (
-            <Button key={`${key}-ungroup`} plain onPress={() => choose('')}>
-              <Text dimColor>Ungroup</Text>
-            </Button>
-          )}
+          {ungroup}
           {cancel}
         </Box>
       )
