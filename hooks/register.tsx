@@ -559,6 +559,7 @@ export const register: Register = (on, options) => {
               key: string
               label: string
               tone: 'lead' | 'plain' | 'danger'
+              icon?: string
               onPress: (press: { surface: RenderSurface }) => unknown
             }[],
           ) => (
@@ -575,7 +576,7 @@ export const register: Register = (on, options) => {
                       bold={item.tone === 'lead'}
                       color={item.tone === 'lead' ? color : item.tone === 'danger' ? 'red' : undefined}
                     >
-                      {item.label}
+                      {item.icon && fun ? `${item.icon} ${item.label}` : item.label}
                     </Text>
                   </Button>,
                 ])}
@@ -684,6 +685,7 @@ export const register: Register = (on, options) => {
                       key: `remove-${b.id}`,
                       label: 'Remove',
                       tone: 'danger' as const,
+                      icon: '🗑️',
                       onPress: async () => {
                         await save($, list => list.filter(x => x.id !== b.id))
                         await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))

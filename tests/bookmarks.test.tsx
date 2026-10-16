@@ -83,7 +83,8 @@ for (const surface of SURFACES) {
     await ui.press({ key: String((await ui.find({ type: 'Button', text: 'Explain' }))?.key) })
     expect(seen.submitted.at(-1)).toContain('What is a monad?')
 
-    await ui.press({ key: String((await ui.find({ type: 'Button', text: 'Remove' }))?.key) })
+    expect(await ui.find({ type: 'Button', text: '🗑️ Remove' })).toBeDefined()
+    await ui.press({ key: String((await ui.find({ type: 'Button', text: /Remove$/ }))?.key) })
     expect(await ui.find({ type: 'Text', text: /1 bookmark$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /why it matters/ })).toBeUndefined()
     await ui.unmount()
@@ -248,6 +249,7 @@ for (const surface of SURFACES) {
 
     const pane = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
     expect(await pane.find({ type: 'Text', text: /◆ Claude/ })).toBeDefined()
+    expect(await pane.find({ type: 'Button', text: 'Remove' })).toBeDefined()
     expect(await pane.find({ type: 'Text', text: /🐛|🤖/ })).toBeUndefined()
     await pane.unmount()
   })
