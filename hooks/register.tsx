@@ -88,6 +88,17 @@ const colorOf = (b: Bookmark) => {
 
 const nextColor = (all: readonly Bookmark[]) => PALETTE[all.length % PALETTE.length] ?? 'yellow'
 
+// A second press of the same ask within this long is a double click, not a new question.
+const REPEAT_MS = 3_000
+let lastAsk = { text: '', at: 0 }
+
+const askOnce = async ($: EngineInterface, text: string) => {
+  const now = await $.clock.now()
+  if (text === lastAsk.text && now - lastAsk.at < REPEAT_MS) return
+  lastAsk = { text, at: now }
+  await $.prompt.submit({ text })
+}
+
 const save = async ($: EngineInterface, fn: (all: Bookmark[]) => Bookmark[]) => {
   const next = await update($, list, all => fn(all ?? []).slice(-MAX))
   await $.store.set(STORE_KEY, next)
@@ -518,8 +529,9 @@ export const register: Register = (on, options) => {
                 key={`group-${kind}`}
                 plain
                 onPress={async () => {
-                  await $.prompt.submit({ text: groupPrompt(chosen, kind) })
+                  // Clear first, so a second click finds nothing selected.
                   await update($, selected, () => [])
+                  await askOnce($, groupPrompt(chosen, kind))
                 }}
               >
                 <Text color="cyan">{GROUP_ASKS[kind].label}</Text>
@@ -630,7 +642,7 @@ export const register: Register = (on, options) => {
                       key: `${kind}-${b.id}`,
                       label: ASKS[kind].label,
                       tone: kind === 'explain' ? ('lead' as const) : ('plain' as const),
-                      onPress: () => void $.prompt.submit({ text: askPrompt(b, kind) }),
+                      onPress: () => askOnce($, askPrompt(b, kind)),
                     })),
                   )}
                   {actionRow(`card-${b.id}`, 'Card', [

@@ -305,3 +305,23 @@ test('clicking a closed card\'s text opens it', async ($, on) => {
   expect(seen.submitted.at(-1)).toContain('What is a monad?')
   await pane.unmount()
 })
+
+test('a double click on an ask sends it once', async ($, on) => {
+  const seen = world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  const explain = String((await pane.find({ type: 'Button', text: 'Explain' }))?.key)
+  await pane.press({ key: explain })
+  await pane.press({ key: explain })
+  expect(seen.submitted).toHaveLength(1)
+
+  for (const box of await pane.findAll({ type: 'Button', text: '☐' })) await pane.press({ key: String(box.key) })
+  await pane.press({ key: 'group-note' })
+  // The bar is gone after the first click, so there is nothing to click twice.
+  expect(await pane.find({ type: 'Button', text: 'Design note' })).toBeUndefined()
+  expect(seen.submitted).toHaveLength(2)
+  await pane.unmount()
+})
