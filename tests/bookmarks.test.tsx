@@ -278,3 +278,29 @@ test('the open card labels its two rows of actions and separates them', async ($
   expect(await pane.findAll({ type: 'Text', text: '·' })).toHaveLength(7)
   await pane.unmount()
 })
+
+test('a ▾ marks the open card and a ▸ each closed one', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  expect(await pane.findAll({ type: 'Text', text: '▾ ' })).toHaveLength(1)
+  expect(await pane.findAll({ type: 'Text', text: '▸ ' })).toHaveLength(1)
+  await pane.unmount()
+})
+
+test('clicking a closed card\'s text opens it', async ($, on) => {
+  const seen = world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  const line = await pane.find({ type: 'Button', text: /What is a monad\?/ })
+  await pane.press({ key: String(line?.key) })
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: 'Explain' }))?.key) })
+  expect(seen.submitted.at(-1)).toContain('What is a monad?')
+  await pane.unmount()
+})

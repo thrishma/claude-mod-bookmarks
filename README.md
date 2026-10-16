@@ -8,14 +8,14 @@ When Claude gives a long explanation, the useful part is usually a few lines: a 
 3 bookmarks · 1 pinned here
 All  🐛 #gotcha 2  🧭 #decision 1
 
-▎🤖 Claude 3m · 📌                         ☐
+▎▾ 🤖 Claude 3m · 📌                       ☐
 ▎The cache misses because both keys include
 ▎the request time, so no two requests share…
 ▎🐛 #gotcha caching
 ▎Ask  Explain · TL;DR · In code · Verify · Remember
 ▎Card Unpin · Copy · Jump · Color · Remove
 
-▎🙋 You 12m                                ☐
+▎▸ 🙋 You 12m                              ☐
 ▎Why does the second call miss the cache?
 ```
 
@@ -55,7 +55,7 @@ Bookmarked messages get a colored border in the conversation, matching their car
 
 ## Acting on a bookmark
 
-Click a card's header to open it. The open card (the newest, at first) shows two rows of actions: **Ask** sends the bookmark to Claude, **Card** manages the bookmark itself.
+Click anywhere on a card (▸) to open it. The open card (the newest, at first) shows two rows of actions: **Ask** sends the bookmark to Claude, **Card** manages the bookmark itself.
 
 - **Explain**: Claude goes deeper, with an example and the takeaway.
 - **TL;DR**: at most 3 bullets, the point first.

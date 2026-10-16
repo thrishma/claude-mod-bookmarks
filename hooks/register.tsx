@@ -548,6 +548,9 @@ export const register: Register = (on, options) => {
             </Box>
           )
 
+          // The whole card (header, text, note) opens it.
+          const openCard = () => update($, expanded, () => b.id)
+
           // One labelled row of actions, the card's bar running down beside it: `Ask  Explain · TL;DR · …`.
           const actionRow = (
             key: string,
@@ -585,7 +588,8 @@ export const register: Register = (on, options) => {
               <Box flexDirection="row" justifyContent="space-between">
                 <Box flexDirection="row">
                   <Text color={color}>▎</Text>
-                  <Button key={`open-${b.id}`} plain onPress={() => update($, expanded, () => b.id)}>
+                  <Button key={`open-${b.id}`} plain onPress={openCard}>
+                    <Text dimColor>{isOpen ? '▾ ' : '▸ '}</Text>
                     <Text bold color={color}>
                       {labelOf(b, fun)}
                     </Text>
@@ -598,13 +602,22 @@ export const register: Register = (on, options) => {
                   </Text>
                 </Button>
               </Box>
-              {lines.map((line, i) => bar(`line-${b.id}-${i}`, <Text wrap="truncate-end">{line}</Text>))}
+              {lines.map((line, i) =>
+                bar(
+                  `line-${b.id}-${i}`,
+                  <Button key={`open-${b.id}-${i}`} plain onPress={openCard}>
+                    <Text wrap="truncate-end">{line}</Text>
+                  </Button>,
+                ),
+              )}
               {b.note !== '' &&
                 bar(
                   `note-${b.id}`,
-                  <Text dimColor italic wrap="truncate-end">
-                    {tagsOf(b).reduce((text, t) => text.replace(t, tagLabel(fun, t)), b.note)}
-                  </Text>,
+                  <Button key={`open-${b.id}-note`} plain onPress={openCard}>
+                    <Text dimColor italic wrap="truncate-end">
+                      {tagsOf(b).reduce((text, t) => text.replace(t, tagLabel(fun, t)), b.note)}
+                    </Text>
+                  </Button>,
                 )}
               {isOpen && (
                 <Box flexDirection="column">
