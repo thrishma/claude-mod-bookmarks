@@ -559,7 +559,7 @@ export const register: Register = (on, options) => {
               key: string
               label: string
               tone: 'lead' | 'plain' | 'danger'
-              /** Drawn alone in place of the label while emoji are on. */
+              /** Drawn alone in place of the label. */
               icon?: string
               onPress: (press: { surface: RenderSurface }) => unknown
             }[],
@@ -577,7 +577,7 @@ export const register: Register = (on, options) => {
                       bold={item.tone === 'lead'}
                       color={item.tone === 'lead' ? color : item.tone === 'danger' ? 'red' : undefined}
                     >
-                      {item.icon && fun ? item.icon : item.label}
+                      {item.icon ?? item.label}
                     </Text>
                   </Button>,
                 ])}
@@ -686,7 +686,8 @@ export const register: Register = (on, options) => {
                       key: `remove-${b.id}`,
                       label: 'Remove',
                       tone: 'danger' as const,
-                      icon: '🗑️',
+                      // A one-cell glyph: the trash emoji needs a variation selector, which terminals size apart from the layout.
+                      icon: '✕',
                       onPress: async () => {
                         await save($, list => list.filter(x => x.id !== b.id))
                         await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))
