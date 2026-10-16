@@ -1,7 +1,7 @@
 {
   "name": "bookmarks",
   "version": "0.5.0",
-  "description": "Bookmark what you or Claude said, see them in a side pane, and act on them: explain, TL;DR, find in code, verify, remember",
+  "description": "Bookmark what you or Claude said, see them in a side pane, and act on them: explain, TL;DR, find in code, verify, remember, pin into context, group",
   "author": {
     "name": "thrishma",
     "url": "https://github.com/thrishma"

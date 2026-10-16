@@ -13,7 +13,7 @@ All  🐛 #gotcha 2  🧭 #decision 1
 ▎the request time, so no two requests share…
 ▎🐛 #gotcha caching
 ▎Ask   Explain · TL;DR · In code · Verify · Remember
-▎Card                 Unpin · Copy · Jump · Color · ✕
+▎Card        Unpin · Copy · Jump · Group · Color · ✕
 
 ▎▸ 🙋 You 12m                              ☐
 ▎Why does the second call miss the cache?
@@ -94,7 +94,7 @@ Groups and tags work together: a card sits in one group, can carry any number of
   ▎Why does the cookie expire after an hour?
 ```
 
-### Asking about several at once
+### Working with several at once
 
 Tick **☐** on a few cards and a line appears at the top of the pane:
 
@@ -106,7 +106,6 @@ Tick **☐** on a few cards and a line appears at the top of the pane:
 ## Good to know
 
 - **Emoji** mark who said what (🤖 Claude, 🙋 You, 🔧 Bash) and some tags; buttons stay plain words. If your terminal draws emoji badly, turn them off with the **Emoji** row for bookmarks in `/config`: the pane falls back to ◆ Claude, ● You, ▸ Bash.
-
 - **Fullscreen mode** is needed for clicking (☆, buttons, chips) and for bookmarking a mouse selection. Outside it, use the commands and the keyboard: `ctrl+x` then `tab` moves into the pane, `Tab` walks its buttons, `Enter` presses, `Esc` returns to the prompt.
 - **Where the pane goes:** a sidebar on the right when the terminal is fullscreen and at least 110 columns wide; otherwise above the prompt.
 - **Jump** works for bookmarks made with ☆ or from a selection, which remember their message. It cannot scroll to a message the terminal no longer keeps drawn.
@@ -117,7 +116,7 @@ Tick **☐** on a few cards and a line appears at the top of the pane:
 
 ### How this differs from the VS Code extension's bookmarks
 
-The Claude Code VS Code extension has its own "Bookmark response" button. This mod is for the **terminal** and adds: bookmarking **your own** messages, **tool calls** and **partial selections**, bookmarks that **persist across sessions**, **tags and colors**, **pinning into Claude's context**, asking about **several at once**, and the **actions** (Explain, TL;DR, In code, Verify, Remember).
+The Claude Code VS Code extension has its own "Bookmark response" button. This mod is for the **terminal** and adds: bookmarking **your own** messages, **tool calls** and **partial selections**, bookmarks that **persist across sessions**, **tags, groups and colors**, **pinning into Claude's context**, asking about **several at once**, and the **actions** (Explain, TL;DR, In code, Verify, Remember).
 
 ## Developing
 

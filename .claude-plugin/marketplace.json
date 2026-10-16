@@ -1,6 +1,6 @@
 {
   "name": "claude-mod-bookmarks",
-  "description": "Bookmarks for Claude Code: pin any message, then explain, summarize, verify or remember it",
+  "description": "Bookmarks for Claude Code: pin any message, group them, then explain, summarize, verify or remember them",
   "owner": {
     "name": "thrishma",
     "url": "https://github.com/thrishma"
@@ -9,7 +9,7 @@
     {
       "name": "bookmarks",
       "source": "./",
-      "description": "Bookmark any message in Claude Code and act on it: explain, TL;DR, find in code, verify, remember"
+      "description": "Bookmark any message or tool call in Claude Code, group them, and act on them: explain, TL;DR, find in code, verify, remember, pin"
     }
   ]
 }
