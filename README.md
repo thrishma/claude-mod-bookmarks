@@ -85,6 +85,7 @@ Tick **☐** on a few cards and a line appears at the top of the pane:
 - **Fullscreen mode** is needed for clicking (☆, buttons, chips) and for bookmarking a mouse selection. Outside it, use the commands and the keyboard: `ctrl+x` then `tab` moves into the pane, `Tab` walks its buttons, `Enter` presses, `Esc` returns to the prompt.
 - **Where the pane goes:** a sidebar on the right when the terminal is fullscreen and at least 110 columns wide; otherwise above the prompt.
 - **Jump** works for bookmarks made with ☆ or from a selection, which remember their message. It cannot scroll to a message the terminal no longer keeps drawn.
+- **One answer per button:** while Claude is answering an ask, that button shows dimmed (`Explain…`) and ignores clicks until the answer finishes, or you interrupt it with Esc. Other buttons stay live, and their asks wait in line.
 - **Pins cost context:** each pinned bookmark is sent with every request in that project (up to about 12,000 characters in all; past that, the oldest pins that fit are kept and the pane still lists the rest). Pins are per project: a pin made in one folder is not sent in another.
 - **Storage:** bookmarks stay on your machine in Claude Code's plugin store, across sessions and projects (a card from another project shows its folder name). Nothing is sent anywhere until you press one of the buttons that ask Claude, or pin one.
 - **Early API:** this uses Claude Code's function-hooks API, which is early access and can change between releases. Built and tested on Claude Code 2.1.301.

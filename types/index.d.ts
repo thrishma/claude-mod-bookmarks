@@ -17,12 +17,24 @@ export type Bookmark = {
   color?: string
 }
 
+/** An ask a button sent whose answer has not finished: that button stays locked until it does. */
+export type BusyAsk = {
+  /** The button's key. */
+  key: string
+  /** The prompt it sent, to find the turn that answers it. */
+  text: string
+  /** When it was sent: a lock older than BUSY_MAX_MS lets go on its own. */
+  at: number
+  /** The turn answering it, once that turn starts; '' while it waits in the queue. */
+  turnId: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     /**
      * `filter` is the tag the pane shows ('' for all); `selected` the ids checked for Ask;
      * `expanded` the card showing its actions ('' for the newest).
      */
-    bookmarks: { list: Bookmark[]; filter: string; selected: string[]; expanded: string }
+    bookmarks: { list: Bookmark[]; filter: string; selected: string[]; expanded: string; busy: BusyAsk[] }
   }
 }

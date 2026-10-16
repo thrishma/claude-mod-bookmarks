@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, Register, RenderElement, RenderSurface } from 'claude-code'
 
-import type { Bookmark } from '../types'
+import type { Bookmark, BusyAsk } from '../types'
 
 const PANE = 'bookmarks'
 const TITLE = 'Bookmarks'
@@ -15,6 +15,7 @@ const list = atom({ plugin: 'bookmarks', key: 'list' } as const, [])
 const filter = atom({ plugin: 'bookmarks', key: 'filter' } as const, '')
 const selected = atom({ plugin: 'bookmarks', key: 'selected' } as const, [])
 const expanded = atom({ plugin: 'bookmarks', key: 'expanded' } as const, '')
+const busy = atom({ plugin: 'bookmarks', key: 'busy' } as const, [] as BusyAsk[])
 const PREVIEW_LINES = 3
 // What pinned bookmarks may add to the system prompt, in all and each.
 const PIN_BUDGET = 12_000
@@ -88,15 +89,20 @@ const colorOf = (b: Bookmark) => {
 
 const nextColor = (all: readonly Bookmark[]) => PALETTE[all.length % PALETTE.length] ?? 'yellow'
 
-// A second press of the same ask within this long is a double click, not a new question.
-const REPEAT_MS = 3_000
-let lastAsk = { text: '', at: 0 }
+// A lock lets go on its own after this long, whatever became of its turn.
+const BUSY_MAX_MS = 15 * 60_000
+// When each main-loop turn started, so its end can release asks queued before it. Lost on a reload; the timeout covers that.
+const turnStarts = new Map<string, number>()
 
-const askOnce = async ($: EngineInterface, text: string) => {
+const isBusy = (all: readonly BusyAsk[], key: string, now: number) => all.some(a => a.key === key && now - a.at < BUSY_MAX_MS)
+
+// Sends an ask unless the same button's last one is still being answered; that button stays locked until it is.
+const askOnce = async ($: EngineInterface, key: string, text: string) => {
   const now = await $.clock.now()
-  if (text === lastAsk.text && now - lastAsk.at < REPEAT_MS) return
-  lastAsk = { text, at: now }
-  await $.prompt.submit({ text })
+  if (isBusy(await read($, busy), key, now)) return
+  await update($, busy, all => [...(all ?? []).filter(a => now - a.at < BUSY_MAX_MS), { key, text, at: now, turnId: '' }])
+  const sent = await $.prompt.submit({ text })
+  if ('drop' in sent && sent.drop !== undefined) await update($, busy, all => (all ?? []).filter(a => a.key !== key))
 }
 
 const save = async ($: EngineInterface, fn: (all: Bookmark[]) => Bookmark[]) => {
@@ -454,12 +460,38 @@ export const register: Register = (on, options) => {
     return { sections: [...composed.sections, { id: 'bookmarks:pins', text, scope: 'session' as const }] }
   })
 
+  // The turn that answers a pane ask is the one that starts with its text: the ask's lock follows that turn.
+  on('turn.start', async ($, e, next) => {
+    const started = await next(e)
+    if (e.agentId !== undefined) return started
+    turnStarts.set(started.turnId, await $.clock.now())
+    const waiting = (await read($, busy)).find(a => a.turnId === '' && a.text === e.text)
+    if (waiting) await update($, busy, all => (all ?? []).map(a => (a === waiting || (a.key === waiting.key && a.turnId === '') ? { ...a, turnId: started.turnId } : a)))
+    return started
+  })
+
+  // Answered, interrupted or failed, the turn is over: its ask unlocks, and so does any still waiting from before it began.
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId !== undefined) return done
+    const startedAt = turnStarts.get(e.turnId)
+    turnStarts.delete(e.turnId)
+    const held = await read($, busy)
+    if (held.length > 0) {
+      await update($, busy, all =>
+        (all ?? []).filter(a => a.turnId !== e.turnId && !(a.turnId === '' && startedAt !== undefined && a.at < startedAt)),
+      )
+    }
+    return done
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const all = await read($, list)
     const active = await read($, filter)
     const picked = await read($, selected)
     const open = await read($, expanded)
+    const asking = await read($, busy)
     const width = Math.max(20, (e.props.bodyColumns ?? e.viewport?.columns ?? 40) - 3)
     const here = await $.session.cwd()
     const now = await $.clock.now()
@@ -531,7 +563,7 @@ export const register: Register = (on, options) => {
                 onPress={async () => {
                   // Clear first, so a second click finds nothing selected.
                   await update($, selected, () => [])
-                  await askOnce($, groupPrompt(chosen, kind))
+                  await askOnce($, `group-${kind}`, groupPrompt(chosen, kind))
                 }}
               >
                 <Text color="cyan">{GROUP_ASKS[kind].label}</Text>
@@ -573,6 +605,8 @@ export const register: Register = (on, options) => {
               tone: 'lead' | 'plain' | 'danger'
               /** Drawn alone in place of the label. */
               icon?: string
+              /** Its ask is being answered: drawn dim with an ellipsis. */
+              isBusy?: boolean
               onPress: (press: { surface: RenderSurface }) => unknown
             }[],
           ) => (
@@ -584,13 +618,20 @@ export const register: Register = (on, options) => {
               <Box flexDirection="row" flexWrap="wrap" flexGrow={1} justifyContent="flex-end" columnGap={1}>
                 {items.flatMap((item, i) => [
                   ...(i > 0 ? [<Text key={`${item.key}-sep`} dimColor>·</Text>] : []),
+                  // askOnce refuses a locked ask itself: a drawing can be older than the lock's timeout.
                   <Button key={item.key} plain onPress={item.onPress}>
-                    <Text
-                      bold={item.tone === 'lead'}
-                      color={item.tone === 'lead' ? color : item.tone === 'danger' ? 'red' : undefined}
-                    >
-                      {item.icon ?? item.label}
-                    </Text>
+                    {item.isBusy ? (
+                      <Text dimColor italic>
+                        {item.label}…
+                      </Text>
+                    ) : (
+                      <Text
+                        bold={item.tone === 'lead'}
+                        color={item.tone === 'lead' ? color : item.tone === 'danger' ? 'red' : undefined}
+                      >
+                        {item.icon ?? item.label}
+                      </Text>
+                    )}
                   </Button>,
                 ])}
               </Box>
@@ -642,7 +683,8 @@ export const register: Register = (on, options) => {
                       key: `${kind}-${b.id}`,
                       label: ASKS[kind].label,
                       tone: kind === 'explain' ? ('lead' as const) : ('plain' as const),
-                      onPress: () => askOnce($, askPrompt(b, kind)),
+                      isBusy: isBusy(asking, `${kind}-${b.id}`, now),
+                      onPress: () => askOnce($, `${kind}-${b.id}`, askPrompt(b, kind)),
                     })),
                   )}
                   {actionRow(`card-${b.id}`, 'Card', [

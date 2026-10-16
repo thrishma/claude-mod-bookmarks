@@ -33,8 +33,8 @@ const world = (
   messages: readonly { role: 'user' | 'assistant'; text: string }[] = MESSAGES,
 ) => {
   mock.store(on)
-  mock.clock(on, { now: 1_000_000 })
-  const seen = { submitted: [] as string[], toasts: [] as string[], copied: [] as string[] }
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const seen = { submitted: [] as string[], toasts: [] as string[], copied: [] as string[], clock }
   on('session.messages', () => ({ value: messages.map(m => ({ ...m, toolUses: [] })) }))
   on('session.cwd', () => ({ value: '/work/demo' }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -306,8 +306,11 @@ test('clicking a closed card\'s text opens it', async ($, on) => {
   await pane.unmount()
 })
 
-test('a double click on an ask sends it once', async ($, on) => {
+test('an ask button stays locked until its answer finishes, and others stay live', async ($, on) => {
   const seen = world(on)
+  let turns = 0
+  on('turn.start', () => ({ turnId: `turn-${++turns}` }))
+  on('turn.complete', () => ({ text: '' }))
   await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
   await runCommand($, { command: 'bm', args: 'me' })
   await runCommand($, { command: 'bm', args: '' })
@@ -317,11 +320,57 @@ test('a double click on an ask sends it once', async ($, on) => {
   await pane.press({ key: explain })
   await pane.press({ key: explain })
   expect(seen.submitted).toHaveLength(1)
+  expect(await pane.find({ type: 'Text', text: 'Explain…' })).toBeDefined()
 
+  // Another ask on the same card still goes out, and queues behind the first.
+  await pane.press({ key: String((await pane.find({ type: 'Button', text: 'TL;DR' }))?.key) })
+  expect(seen.submitted).toHaveLength(2)
+
+  // A turn already running when Explain was pressed ends: Explain stays locked.
+  await $.turn.complete({ turnId: 'turn-0', answer: '', durationMs: 1, isAborted: false, reason: 'answer' } as never)
+  expect(await pane.find({ type: 'Text', text: 'Explain…' })).toBeDefined()
+
+  // Explain's own turn starts and finishes: it unlocks and can be asked again.
+  const started = await $.turn.start({ text: seen.submitted[0] ?? '', turnId: '' } as never)
+  await $.turn.complete({ turnId: started.turnId, answer: 'ok', durationMs: 1, isAborted: false, reason: 'answer' } as never)
+  expect(await pane.find({ type: 'Text', text: 'Explain…' })).toBeUndefined()
+  await pane.press({ key: explain })
+  expect(seen.submitted).toHaveLength(3)
+
+  // An interrupted answer (Esc) unlocks too.
+  const again = await $.turn.start({ text: seen.submitted[2] ?? '', turnId: '' } as never)
+  await $.turn.complete({ turnId: again.turnId, answer: '', durationMs: 1, isAborted: true, reason: 'aborted' } as never)
+  expect(await pane.find({ type: 'Text', text: 'Explain…' })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('a lock lets go on its own after 15 minutes', async ($, on) => {
+  const seen = world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  const explain = String((await pane.find({ type: 'Button', text: 'Explain' }))?.key)
+  await pane.press({ key: explain })
+  await seen.clock.advance(10 * 60_000)
+  await pane.press({ key: explain })
+  expect(seen.submitted).toHaveLength(1)
+  await seen.clock.advance(6 * 60_000)
+  await pane.press({ key: explain })
+  expect(seen.submitted).toHaveLength(2)
+  await pane.unmount()
+})
+
+test('the selection line clears on the first click, so a group ask cannot go twice', async ($, on) => {
+  const seen = world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: 'me' })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
   for (const box of await pane.findAll({ type: 'Button', text: '☐' })) await pane.press({ key: String(box.key) })
   await pane.press({ key: 'group-note' })
-  // The bar is gone after the first click, so there is nothing to click twice.
   expect(await pane.find({ type: 'Button', text: 'Design note' })).toBeUndefined()
-  expect(seen.submitted).toHaveLength(2)
+  expect(seen.submitted).toHaveLength(1)
   await pane.unmount()
 })
