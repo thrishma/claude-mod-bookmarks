@@ -559,6 +559,7 @@ export const register: Register = (on, options) => {
               key: string
               label: string
               tone: 'lead' | 'plain' | 'danger'
+              /** Drawn alone in place of the label while emoji are on. */
               icon?: string
               onPress: (press: { surface: RenderSurface }) => unknown
             }[],
@@ -576,7 +577,7 @@ export const register: Register = (on, options) => {
                       bold={item.tone === 'lead'}
                       color={item.tone === 'lead' ? color : item.tone === 'danger' ? 'red' : undefined}
                     >
-                      {item.icon && fun ? `${item.icon} ${item.label}` : item.label}
+                      {item.icon && fun ? item.icon : item.label}
                     </Text>
                   </Button>,
                 ])}

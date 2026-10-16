@@ -13,7 +13,7 @@ All  🐛 #gotcha 2  🧭 #decision 1
 ▎the request time, so no two requests share…
 ▎🐛 #gotcha caching
 ▎Ask   Explain · TL;DR · In code · Verify · Remember
-▎Card         Unpin · Copy · Jump · Color · 🗑️ Remove
+▎Card                Unpin · Copy · Jump · Color · 🗑️
 
 ▎▸ 🙋 You 12m                              ☐
 ▎Why does the second call miss the cache?
@@ -66,7 +66,7 @@ Click anywhere on a card (▸) to open it. The open card (the newest, at first) 
 - **Copy**: copies a tool call's command (or file path), else the first code block, else the text.
 - **Jump**: scrolls the conversation back to the message.
 - **Color**: cycles the card's and the message's highlight color.
-- **🗑️ Remove**: deletes the bookmark.
+- **🗑️** (Remove): deletes the bookmark.
 
 Filter chips at the top of the pane (`All  🐛 #gotcha  🧭 #decision …`) show one tag at a time. Some tags get an emoji: `#gotcha` 🐛, `#bug` 🐞, `#decision` 🧭, `#todo` 📝, `#idea` 💡, `#question` ❓, `#learn` 🎓, `#perf` 🚀, `#security` 🔒, `#fix` 🩹.
 

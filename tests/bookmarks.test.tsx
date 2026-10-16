@@ -83,8 +83,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: String((await ui.find({ type: 'Button', text: 'Explain' }))?.key) })
     expect(seen.submitted.at(-1)).toContain('What is a monad?')
 
-    expect(await ui.find({ type: 'Button', text: '🗑️ Remove' })).toBeDefined()
-    await ui.press({ key: String((await ui.find({ type: 'Button', text: /Remove$/ }))?.key) })
+    await ui.press({ key: String((await ui.find({ type: 'Button', text: '🗑️' }))?.key) })
     expect(await ui.find({ type: 'Text', text: /1 bookmark$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /why it matters/ })).toBeUndefined()
     await ui.unmount()
