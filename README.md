@@ -12,8 +12,8 @@ All  🐛 #gotcha 2  🧭 #decision 1
 ▎The cache misses because both keys include
 ▎the request time, so no two requests share…
 ▎🐛 #gotcha caching
- Explain  TL;DR  In code  Verify  Remember
- Unpin  Copy  Jump  Color  Remove
+▎Ask  Explain · TL;DR · In code · Verify · Remember
+▎Card Unpin · Copy · Jump · Color · Remove
 
 ▎🙋 You 12m                                ☐
 ▎Why does the second call miss the cache?
@@ -55,7 +55,7 @@ Bookmarked messages get a colored border in the conversation, matching their car
 
 ## Acting on a bookmark
 
-Click a card's header to open it; the open card (the newest, at first) shows its actions:
+Click a card's header to open it. The open card (the newest, at first) shows two rows of actions: **Ask** sends the bookmark to Claude, **Card** manages the bookmark itself.
 
 - **Explain**: Claude goes deeper, with an example and the takeaway.
 - **TL;DR**: at most 3 bullets, the point first.

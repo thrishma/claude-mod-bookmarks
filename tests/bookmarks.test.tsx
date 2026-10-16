@@ -265,3 +265,16 @@ test('long text wraps beside the bar and ends in … when cut', async ($, on) =>
   expect(lines.at(-1)?.text).toMatch(/…$/)
   await pane.unmount()
 })
+
+test('the open card labels its two rows of actions and separates them', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/work/demo', surface: 'terminal', isInteractive: true })
+  await runCommand($, { command: 'bm', args: '' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: PROPS as never })
+  expect(await pane.find({ type: 'Text', text: 'Ask' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'Card' })).toBeDefined()
+  // Five asks and four card actions (no Jump without a row): 4 + 3 separators.
+  expect(await pane.findAll({ type: 'Text', text: '·' })).toHaveLength(7)
+  await pane.unmount()
+})

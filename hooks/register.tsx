@@ -548,6 +548,38 @@ export const register: Register = (on, options) => {
             </Box>
           )
 
+          // One labelled row of actions, the card's bar running down beside it: `Ask  Explain · TL;DR · …`.
+          const actionRow = (
+            key: string,
+            label: string,
+            items: {
+              key: string
+              label: string
+              tone: 'lead' | 'plain' | 'danger'
+              onPress: (press: { surface: RenderSurface }) => unknown
+            }[],
+          ) => (
+            <Box key={key} flexDirection="row">
+              <Text color={color}>▎</Text>
+              <Box width={5} flexShrink={0}>
+                <Text dimColor>{label}</Text>
+              </Box>
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                {items.flatMap((item, i) => [
+                  ...(i > 0 ? [<Text key={`${item.key}-sep`} dimColor>·</Text>] : []),
+                  <Button key={item.key} plain onPress={item.onPress}>
+                    <Text
+                      bold={item.tone === 'lead'}
+                      color={item.tone === 'lead' ? color : item.tone === 'danger' ? 'red' : undefined}
+                    >
+                      {item.label}
+                    </Text>
+                  </Button>,
+                ])}
+              </Box>
+            </Box>
+          )
+
           return (
             <Box key={b.id} flexDirection="column">
               <Box flexDirection="row" justifyContent="space-between">
@@ -575,58 +607,57 @@ export const register: Register = (on, options) => {
                   </Text>,
                 )}
               {isOpen && (
-                <Box flexDirection="column" paddingLeft={1} marginTop={1}>
-                  <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-                    {(Object.keys(ASKS) as Ask[]).map(kind => (
-                      <Button
-                        key={`${kind}-${b.id}`}
-                        plain
-                        onPress={() => void $.prompt.submit({ text: askPrompt(b, kind) })}
-                      >
-                        <Text color={kind === 'explain' ? color : undefined} bold={kind === 'explain'}>
-                          {ASKS[kind].label}
-                        </Text>
-                      </Button>
-                    ))}
-                  </Box>
-                  <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-                    <Button
-                      key={`pin-${b.id}`}
-                      plain
-                      onPress={async () => {
+                <Box flexDirection="column">
+                  {actionRow(
+                    `ask-${b.id}`,
+                    'Ask',
+                    (Object.keys(ASKS) as Ask[]).map(kind => ({
+                      key: `${kind}-${b.id}`,
+                      label: ASKS[kind].label,
+                      tone: kind === 'explain' ? ('lead' as const) : ('plain' as const),
+                      onPress: () => void $.prompt.submit({ text: askPrompt(b, kind) }),
+                    })),
+                  )}
+                  {actionRow(`card-${b.id}`, 'Card', [
+                    {
+                      key: `pin-${b.id}`,
+                      label: b.pinned ? 'Unpin' : 'Pin',
+                      tone: 'plain' as const,
+                      onPress: async () => {
                         await save($, all => all.map(x => (x.id === b.id ? { ...x, pinned: !x.pinned } : x)))
                         $.ui.invalidate('prompt.section')
                         $.ui.toast(show(fun, '📌', b.pinned ? 'Unpinned' : 'Pinned: Claude keeps it in context in this project'))
-                      }}
-                    >
-                      <Text dimColor>{b.pinned ? 'Unpin' : 'Pin'}</Text>
-                    </Button>
-                    <Button
-                      key={`copy-${b.id}`}
-                      plain
-                      onPress={async press => {
+                      },
+                    },
+                    {
+                      key: `copy-${b.id}`,
+                      label: 'Copy',
+                      tone: 'plain' as const,
+                      onPress: async (press: { surface: RenderSurface }) => {
                         const done = await $.ui.copy({ text: copyTextOf(b), surface: press.surface })
                         $.ui.toast(done.isCopied ? show(fun, '📋', 'Copied') : `Couldn't copy: ${done.reason}`)
-                      }}
-                    >
-                      <Text dimColor>Copy</Text>
-                    </Button>
-                    {b.rowId !== undefined && (
-                      <Button
-                        key={`jump-${b.id}`}
-                        plain
-                        onPress={async () => {
-                          const moved = await $.ui.scroll({ to: { requestId: b.rowId ?? '' } }).catch(() => ({ deny: 'not supported here' }))
-                          if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
-                        }}
-                      >
-                        <Text dimColor>Jump</Text>
-                      </Button>
-                    )}
-                    <Button
-                      key={`color-${b.id}`}
-                      plain
-                      onPress={async () => {
+                      },
+                    },
+                    ...(b.rowId !== undefined
+                      ? [
+                          {
+                            key: `jump-${b.id}`,
+                            label: 'Jump',
+                            tone: 'plain' as const,
+                            onPress: async () => {
+                              const moved = await $.ui
+                                .scroll({ to: { requestId: b.rowId ?? '' } })
+                                .catch(() => ({ deny: 'not supported here' }))
+                              if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
+                            },
+                          },
+                        ]
+                      : []),
+                    {
+                      key: `color-${b.id}`,
+                      label: 'Color',
+                      tone: 'plain' as const,
+                      onPress: async () => {
                         await save($, all =>
                           all.map(x => {
                             if (x.id !== b.id) return x
@@ -634,24 +665,19 @@ export const register: Register = (on, options) => {
                             return { ...x, color: PALETTE[(at + 1) % PALETTE.length] ?? 'yellow' }
                           }),
                         )
-                      }}
-                    >
-                      <Text dimColor>Color</Text>
-                    </Button>
-                    <Button
-                      key={`remove-${b.id}`}
-                      plain
-                      onPress={async () => {
+                      },
+                    },
+                    {
+                      key: `remove-${b.id}`,
+                      label: 'Remove',
+                      tone: 'danger' as const,
+                      onPress: async () => {
                         await save($, list => list.filter(x => x.id !== b.id))
                         await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))
                         if (b.pinned) $.ui.invalidate('prompt.section')
-                      }}
-                    >
-                      <Text color="red" dimColor>
-                        Remove
-                      </Text>
-                    </Button>
-                  </Box>
+                      },
+                    },
+                  ])}
                 </Box>
               )}
             </Box>
