@@ -1,6 +1,12 @@
 export type Bookmark = {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'tool'
+  /** For a tool row: which tool (`Bash`, `Edit`, …). */
+  tool?: string
+  /** What Copy puts on the clipboard when it is not the text itself (a Bash command). */
+  copy?: string
+  /** Kept in Claude's system prompt in this project, so it survives /compact. */
+  pinned?: boolean
   text: string
   note: string
   cwd: string
@@ -13,7 +19,7 @@ export type Bookmark = {
 
 declare module 'claude-code' {
   interface PluginState {
-    /** `filter` is the tag the pane shows ('' for all). */
-    bookmarks: { list: Bookmark[]; filter: string }
+    /** `filter` is the tag the pane shows ('' for all); `selected` the ids checked for Ask. */
+    bookmarks: { list: Bookmark[]; filter: string; selected: string[] }
   }
 }

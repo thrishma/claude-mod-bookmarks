@@ -6,6 +6,19 @@ const MESSAGES = [
   { role: 'user', text: '<command-name>/bm</command-name>', toolUses: [] },
 ] as const
 
+// The engine stamps origin and presentation on a real run; the kit fills them in.
+const runCommand = ($: { command: { run: (e: never) => Promise<unknown> } }, e: { command: string; args: string }) =>
+  $.command.run(e as never)
+
+const composeInput = (surface: 'terminal' | 'desktop') => ({
+  model: 'claude-opus-5-5',
+  promptModel: 'claude-opus-5-5',
+  surfaces: [surface],
+  tools: [],
+  outputStyle: null,
+  traits: [],
+})
+
 const PANE = { plugin: 'bookmarks', component: 'Pane', requestId: 'bookmarks' } as const
 const PROPS = { title: 'Bookmarks', isFocused: true, bodyColumns: 40, placement: 'dock' } as const
 
@@ -27,11 +40,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     await $.session.start({ cwd: '/work/demo', surface, isInteractive: true })
 
-    const mine = await $.command.run({ command: 'bm', args: 'me -- why it matters' })
+    const mine = await runCommand($, { command: 'bm', args: 'me -- why it matters' })
     expect(JSON.stringify(mine)).toContain('What is a monad?')
-    const last = await $.command.run({ command: 'bm', args: '' })
+    const last = await runCommand($, { command: 'bm', args: '' })
     expect(JSON.stringify(last)).toContain('chain computations')
-    const miss = await $.command.run({ command: 'bm', args: 'nonexistent' })
+    const miss = await runCommand($, { command: 'bm', args: 'nonexistent' })
     expect(JSON.stringify(miss)).toContain('No message found')
 
     const ui = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
@@ -74,7 +87,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
     await $.session.start({ cwd: '/work/demo', surface, isInteractive: true })
-    const done = await $.command.run({ command: 'bm', args: '' })
+    const done = await runCommand($, { command: 'bm', args: '' })
     expect(JSON.stringify(done)).toContain('What is a monad')
 
     const ui = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
@@ -147,9 +160,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.session.start({ cwd: '/work/demo', surface, isInteractive: true })
 
     // A bare "-- note" right after the command name is a note, not a search.
-    await $.command.run({ command: 'bm', args: '-- #gotcha careful' })
-    await $.command.run({ command: 'bm', args: 'me' })
-    const tagged = await $.command.run({ command: 'bm-tag', args: 'decision, #Infra' })
+    await runCommand($, { command: 'bm', args: '-- #gotcha careful' })
+    await runCommand($, { command: 'bm', args: 'me' })
+    const tagged = await runCommand($, { command: 'bm-tag', args: 'decision, #Infra' })
     expect(JSON.stringify(tagged)).toContain('#decision #infra')
 
     const ui = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
@@ -175,5 +188,92 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'filter-all' })
     expect(await ui.findAll({ type: 'Button', text: /TL;DR/ })).toHaveLength(2)
     await ui.unmount()
+  })
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a tool call can be starred, copied, pinned and asked about with others on ${surface}`, async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_000_000 })
+    const submitted: string[] = []
+    const copied: string[] = []
+    on('session.messages', () => ({ value: MESSAGES.map(m => ({ ...m, toolUses: [] })) }))
+    on('session.cwd', () => ({ value: '/work/demo' }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.toast', () => ({ value: undefined }))
+    on('ui.copy', (_$, e) => {
+      copied.push(e.text)
+      return { value: { isCopied: true } }
+    })
+    on('prompt.submit', (_$, e) => {
+      submitted.push(e.text)
+      return { text: e.text }
+    })
+    on('ui.invalidate', () => ({ value: undefined }))
+    on('prompt.compose', () => ({ sections: [{ id: 'base', text: 'You are Claude.', scope: 'shared' }] }))
+    on('command.register', (_$, e) => ({ value: { command: e.name } }))
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+    on('ui.render', { component: 'ToolUse' }, ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>{e.props.tool}</Text>
+    })
+    await $.session.start({ cwd: '/work/demo', surface, isInteractive: true })
+
+    // Star a finished Bash call.
+    const row = await $.ui.mount({
+      plugin: 'bookmarks',
+      surface,
+      component: 'ToolUse',
+      requestId: 'tool-1',
+      props: {
+        tool_use_id: 'tool-1',
+        tool: 'Bash',
+        input: { command: 'npm test -- --watch=false' },
+        isRunning: false,
+        isErrored: true,
+        isInterrupted: false,
+        output: { stdout: '', stderr: 'TypeError: cannot read properties of undefined' },
+      } as never,
+    })
+    await row.press({ key: 'star-tool-1' })
+    expect(await row.find({ type: 'Text', text: '★' })).toBeDefined()
+
+    await runCommand($, { command: 'bm', args: '' })
+
+    const pane = await $.ui.mount({ ...PANE, surface, props: PROPS as never })
+    expect(await pane.find({ type: 'Text', text: /▸ Bash/ })).toBeDefined()
+    const cards = await pane.findAll({ type: 'Button', text: /^Copy$/ })
+    expect(cards).toHaveLength(2)
+
+    // Copy on the tool card copies the command, not the output. The newest card is first.
+    await pane.press({ key: String(cards[1]?.key) })
+    expect(copied.at(-1)).toBe('npm test -- --watch=false')
+
+    // Pin it: the system prompt carries it, after the base section.
+    const pinButtons = await pane.findAll({ type: 'Button', text: /^Pin$/ })
+    await pane.press({ key: String(pinButtons[1]?.key) })
+    expect(await pane.find({ type: 'Text', text: /1 pinned/ })).toBeDefined()
+    const composed = await $.prompt.compose(composeInput(surface))
+    expect(composed.sections.map(x => x.id)).toEqual(['base', 'bookmarks:pins'])
+    expect(composed.sections[1]?.text).toContain('npm test -- --watch=false')
+    expect(composed.sections[1]?.scope).toBe('session')
+
+    // Select both and ask how they connect.
+    const boxes = await pane.findAll({ type: 'Button', text: '☐' })
+    for (const box of boxes) await pane.press({ key: String(box.key) })
+    expect(await pane.find({ type: 'Text', text: /2 selected/ })).toBeDefined()
+    await pane.press({ key: 'group-connect' })
+    expect(submitted.at(-1)).toContain('How do these relate?')
+    expect(submitted.at(-1)).toContain('TypeError: cannot read properties')
+    expect(submitted.at(-1)).toContain('A monad is a way to chain computations.')
+    expect(await pane.find({ type: 'Text', text: /selected/ })).toBeUndefined()
+
+    // Unpinned, it leaves the system prompt.
+    await pane.press({ key: String((await pane.find({ type: 'Button', text: /^Unpin$/ }))?.key) })
+    const after = await $.prompt.compose(composeInput(surface))
+    expect(after.sections.map(x => x.id)).toEqual(['base'])
+
+    await pane.unmount()
+    await row.unmount()
   })
 }

@@ -13,6 +13,11 @@ const PALETTE = ['yellow', 'cyan', 'magenta', 'green', 'blue', 'red'] as const
 const SHOWN = 50
 const list = atom({ plugin: 'bookmarks', key: 'list' } as const, [])
 const filter = atom({ plugin: 'bookmarks', key: 'filter' } as const, '')
+const selected = atom({ plugin: 'bookmarks', key: 'selected' } as const, [])
+// What pinned bookmarks may add to the system prompt, in all and each.
+const PIN_BUDGET = 12_000
+const PIN_EACH = 3_000
+const TOOL_TEXT = 8_000
 
 // Slash-command records and engine reminders show up as user rows; they are not something to bookmark.
 const isBookmarkable = (text: string) => {
@@ -133,10 +138,100 @@ const ASKS = {
 
 type Ask = keyof typeof ASKS
 
+const whoOf = (b: Bookmark) =>
+  b.role === 'assistant' ? 'you (Claude) said' : b.role === 'tool' ? `a ${b.tool ?? 'tool'} call produced` : 'I wrote'
+
+const labelOf = (b: Bookmark) => (b.role === 'assistant' ? '◆ Claude' : b.role === 'tool' ? `▸ ${b.tool ?? 'Tool'}` : '● You')
+
 const askPrompt = (b: Bookmark, kind: Ask) => {
-  const who = b.role === 'assistant' ? 'you (Claude) said' : 'I wrote'
   const note = b.note ? `\n\nMy note on it: ${b.note}` : ''
-  return `I bookmarked something ${who} earlier. ${ASKS[kind].ask}\n\n<bookmark>\n${b.text}\n</bookmark>${note}`
+  return `I bookmarked something ${whoOf(b)} earlier. ${ASKS[kind].ask}\n\n<bookmark>\n${b.text}\n</bookmark>${note}`
+}
+
+// What the selection bar asks Claude to do with several bookmarks at once.
+const GROUP_ASKS = {
+  connect: {
+    label: 'Connect',
+    ask: 'How do these relate? Find the common thread, anything that contradicts, and what they add up to.',
+  },
+  checklist: {
+    label: 'Checklist',
+    ask: 'Turn these into a concrete, ordered checklist I can act on. Mark anything you would verify first.',
+  },
+  note: {
+    label: 'Design note',
+    ask: 'Write a short design note from these, in markdown: context, the decisions and why, and open questions.',
+  },
+} as const
+
+type GroupAsk = keyof typeof GROUP_ASKS
+
+const groupPrompt = (bs: readonly Bookmark[], kind: GroupAsk) => {
+  const items = bs
+    .map((b, i) => {
+      const note = b.note ? `\nMy note: ${b.note}` : ''
+      return `<bookmark n="${i + 1}" from="${whoOf(b)}">\n${b.text}${note}\n</bookmark>`
+    })
+    .join('\n\n')
+  return `I bookmarked ${bs.length} things from our conversations. ${GROUP_ASKS[kind].ask}\n\n${items}`
+}
+
+// Copy takes a tool's command, else the first code block, else the whole text.
+const copyTextOf = (b: Bookmark) => {
+  if (b.copy) return b.copy
+  const fence = b.text.match(/```[^\n]*\n([\s\S]*?)```/)
+  return fence?.[1]?.replace(/\n$/, '') ?? b.text
+}
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+
+const asText = (value: unknown) => {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  const r = asRecord(value)
+  const parts = [r.stdout, r.stderr, r.content, r.text, r.output].filter((v): v is string => typeof v === 'string' && v !== '')
+  if (parts.length > 0) return parts.join('\n')
+  return JSON.stringify(value, null, 2) ?? ''
+}
+
+// A tool row as one bookmark: what was called, then what came back.
+const toolBookmark = (tool: string, input: unknown, output: unknown) => {
+  const i = asRecord(input)
+  const what = [i.command, i.file_path, i.pattern, i.url, i.query, i.description].find(
+    (v): v is string => typeof v === 'string' && v !== '',
+  )
+  const call = what ?? clip(JSON.stringify(input) ?? '', 300)
+  const result = asText(output)
+  const text = `${tool}: ${call}${result ? `\n\n${result}` : ''}`
+  return {
+    text: text.length > TOOL_TEXT ? `${text.slice(0, TOOL_TEXT)}\n… (cut)` : text,
+    copy: typeof i.command === 'string' ? i.command : typeof i.file_path === 'string' ? i.file_path : undefined,
+  }
+}
+
+// The system prompt section that keeps this project's pins in Claude's context.
+const pinnedSection = async ($: EngineInterface) => {
+  const here = await $.session.cwd()
+  const pins = (await read($, list)).filter(b => b.pinned && b.cwd === here)
+  if (pins.length === 0) return undefined
+
+  let left = PIN_BUDGET
+  const items: string[] = []
+  for (const b of pins) {
+    const body = b.text.length > PIN_EACH ? `${b.text.slice(0, PIN_EACH)}…` : b.text
+    const item = `<pinned from="${whoOf(b)}"${b.note ? ` note="${oneLine(b.note).replace(/"/g, "'")}"` : ''}>\n${body}\n</pinned>`
+    if (item.length > left) break
+    left -= item.length
+    items.push(item)
+  }
+  const cut = pins.length - items.length
+  return [
+    '# Pinned by the user',
+    'The user pinned these from the conversation so they stay in your context, through compaction too. Treat them as standing notes the user chose to keep: decisions, constraints and facts to honor. Text you wrote earlier may since have gone stale; check before relying on it.',
+    ...items,
+    ...(cut > 0 ? [`(${cut} more pinned bookmark${cut === 1 ? '' : 's'} did not fit.)`] : []),
+  ].join('\n\n')
 }
 
 // The star on each message: ★ when bookmarked, ☆ revealed on hover otherwise; a click toggles it.
@@ -147,6 +242,7 @@ const star = async (
   role: Bookmark['role'],
   text: string,
   drawn: RenderElement,
+  tool?: { name: string; copy: string | undefined },
 ) => {
   const all = await read($, list)
   const rowKey = squash(text)
@@ -169,10 +265,12 @@ const star = async (
       savedAt: now,
       rowId: e.requestId,
       color: nextColor(all),
+      ...(tool ? { tool: tool.name } : {}),
+      ...(tool?.copy ? { copy: tool.copy } : {}),
     }
     await save($, bs => [...bs, bookmark])
     void $.ui.open(OPEN)
-    $.ui.toast(`Bookmarked ${role === 'assistant' ? "Claude's" : 'your'} message`)
+    $.ui.toast(tool ? `Bookmarked the ${tool.name} call` : `Bookmarked ${role === 'assistant' ? "Claude's" : 'your'} message`)
   }
 
   return (
@@ -278,10 +376,25 @@ export const register: Register = on => {
     return star($, $.ui.resolve(e), e, 'user', e.props.text, drawn)
   })
 
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    const drawn = await next(e)
+    if (e.props.isRunning) return drawn
+    const made = toolBookmark(e.props.tool, e.props.input, e.props.output)
+    return star($, $.ui.resolve(e), e, 'tool', made.text, drawn, { name: e.props.tool, copy: made.copy })
+  })
+
+  on('prompt.compose', async ($, e, next) => {
+    const composed = await next(e)
+    const text = await pinnedSection($)
+    if (text === undefined) return composed
+    return { sections: [...composed.sections, { id: 'bookmarks:pins', text, scope: 'session' as const }] }
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const all = await read($, list)
     const active = await read($, filter)
+    const picked = await read($, selected)
     const cols = Math.max(20, (e.props.bodyColumns ?? e.viewport?.columns ?? 40) - 4)
     const here = await $.session.cwd()
     const now = await $.clock.now()
@@ -290,8 +403,8 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           <Text dimColor>No bookmarks yet.</Text>
-          <Text dimColor>Click ☆ on a message, or</Text>
-          <Text dimColor>highlight text, then /bm</Text>
+          <Text dimColor>Click ☆ on a message or tool call,</Text>
+          <Text dimColor>or highlight text, then /bm</Text>
           <Text dimColor>/bm — Claude's last reply</Text>
           <Text dimColor>/bm me — your last prompt</Text>
           <Text dimColor>/bm -- #tag note — with a tag</Text>
@@ -306,7 +419,11 @@ export const register: Register = on => {
     const current = tags.includes(active) ? active : ''
     const matching = current === '' ? all : all.filter(b => tagsOf(b).includes(current))
     const shown = [...matching].reverse().slice(0, SHOWN)
+    const chosen = all.filter(b => picked.includes(b.id))
+    const pins = all.filter(b => b.pinned && b.cwd === here).length
     const pickFilter = (tag: string) => update($, filter, () => tag)
+    const toggleOne = (id: string) =>
+      update($, selected, ids => ((ids ?? []).includes(id) ? (ids ?? []).filter(x => x !== id) : [...(ids ?? []), id]))
 
     return (
       <Box flexDirection="column">
@@ -326,61 +443,117 @@ export const register: Register = on => {
             ))}
           </Box>
         )}
-        {shown.map(b => (
-          <Box key={b.id} flexDirection="column" borderStyle="round" borderColor={colorOf(b)} paddingX={1}>
-            <Text bold color={colorOf(b)}>
-              {b.role === 'assistant' ? '◆ Claude' : '● You'}
-              <Text dimColor>
-                {' '}· {ago(now, b.savedAt)}
-                {b.cwd !== here ? ` · ${b.cwd.split('/').pop()}` : ''}
-              </Text>
+        {pins > 0 && (
+          <Text dimColor>
+            📌 {pins} pinned in Claude's context here
+          </Text>
+        )}
+        {chosen.length > 0 && (
+          <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+            <Text bold color="cyan">
+              {chosen.length} selected — ask about them
             </Text>
-            <Text>{clip(b.text, cols * 2)}</Text>
-            {b.note !== '' && <Text dimColor italic>✎ {clip(b.note, cols)}</Text>}
             <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-              {(Object.keys(ASKS) as Ask[]).map(kind => (
+              {(Object.keys(GROUP_ASKS) as GroupAsk[]).map(kind => (
                 <Button
-                  key={`${kind}-${b.id}`}
-                  label={ASKS[kind].label}
-                  {...(kind === 'explain' ? { variant: 'primary' as const } : {})}
-                  onPress={() => void $.prompt.submit({ text: askPrompt(b, kind) })}
-                />
-              ))}
-            </Box>
-            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-              {b.rowId !== undefined && (
-                <Button
-                  key={`jump-${b.id}`}
-                  label="Jump"
+                  key={`group-${kind}`}
+                  label={GROUP_ASKS[kind].label}
+                  {...(kind === 'connect' ? { variant: 'primary' as const } : {})}
                   onPress={async () => {
-                    const moved = await $.ui.scroll({ to: { requestId: b.rowId ?? '' } }).catch(() => ({ deny: 'not supported here' }))
-                    if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
+                    await $.prompt.submit({ text: groupPrompt(chosen, kind) })
+                    await update($, selected, () => [])
                   }}
                 />
-              )}
-              <Button
-                key={`color-${b.id}`}
-                label="Color"
-                onPress={async () => {
-                  await save($, all =>
-                    all.map(x => {
-                      if (x.id !== b.id) return x
-                      const at = PALETTE.indexOf(colorOf(x) as (typeof PALETTE)[number])
-                      return { ...x, color: PALETTE[(at + 1) % PALETTE.length] ?? 'yellow' }
-                    }),
-                  )
-                }}
-              />
-              <Button
-                key={`remove-${b.id}`}
-                label="Remove"
-                onPress={async () => {
-                  await save($, list => list.filter(x => x.id !== b.id))
-                }}
-              />
+              ))}
+              <Button key="group-clear" label="Clear" onPress={() => update($, selected, () => [])} />
             </Box>
           </Box>
-        ))}
+        )}
+        {shown.map(b => {
+          const isPicked = picked.includes(b.id)
+          return (
+            <Box key={b.id} flexDirection="column" borderStyle="round" borderColor={colorOf(b)} paddingX={1}>
+              <Box flexDirection="row" columnGap={1}>
+                <Button key={`pick-${b.id}`} plain onPress={() => toggleOne(b.id)}>
+                  <Text color={isPicked ? 'cyan' : undefined} dimColor={!isPicked}>
+                    {isPicked ? '☑' : '☐'}
+                  </Text>
+                </Button>
+                <Text bold color={colorOf(b)}>
+                  {labelOf(b)}
+                  <Text dimColor>
+                    {' '}· {ago(now, b.savedAt)}
+                    {b.cwd !== here ? ` · ${b.cwd.split('/').pop()}` : ''}
+                    {b.pinned ? ' · 📌' : ''}
+                  </Text>
+                </Text>
+              </Box>
+              <Text>{clip(b.text, cols * 2)}</Text>
+              {b.note !== '' && <Text dimColor italic>✎ {clip(b.note, cols)}</Text>}
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                {(Object.keys(ASKS) as Ask[]).map(kind => (
+                  <Button
+                    key={`${kind}-${b.id}`}
+                    label={ASKS[kind].label}
+                    {...(kind === 'explain' ? { variant: 'primary' as const } : {})}
+                    onPress={() => void $.prompt.submit({ text: askPrompt(b, kind) })}
+                  />
+                ))}
+              </Box>
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                <Button
+                  key={`pin-${b.id}`}
+                  label={b.pinned ? 'Unpin' : 'Pin'}
+                  onPress={async () => {
+                    await save($, all => all.map(x => (x.id === b.id ? { ...x, pinned: !x.pinned } : x)))
+                    $.ui.invalidate('prompt.section')
+                    $.ui.toast(b.pinned ? 'Unpinned' : "Pinned: Claude keeps it in context in this project")
+                  }}
+                />
+                <Button
+                  key={`copy-${b.id}`}
+                  label="Copy"
+                  onPress={async press => {
+                    const done = await $.ui.copy({ text: copyTextOf(b), surface: press.surface })
+                    $.ui.toast(done.isCopied ? 'Copied' : `Couldn't copy: ${done.reason}`)
+                  }}
+                />
+                {b.rowId !== undefined && (
+                  <Button
+                    key={`jump-${b.id}`}
+                    label="Jump"
+                    onPress={async () => {
+                      const moved = await $.ui.scroll({ to: { requestId: b.rowId ?? '' } }).catch(() => ({ deny: 'not supported here' }))
+                      if ('deny' in moved) $.ui.toast(`Can't jump to that message: ${moved.deny}`)
+                    }}
+                  />
+                )}
+                <Button
+                  key={`color-${b.id}`}
+                  label="Color"
+                  onPress={async () => {
+                    await save($, all =>
+                      all.map(x => {
+                        if (x.id !== b.id) return x
+                        const at = PALETTE.indexOf(colorOf(x) as (typeof PALETTE)[number])
+                        return { ...x, color: PALETTE[(at + 1) % PALETTE.length] ?? 'yellow' }
+                      }),
+                    )
+                  }}
+                />
+                <Button
+                  key={`remove-${b.id}`}
+                  label="Remove"
+                  onPress={async () => {
+                    await save($, list => list.filter(x => x.id !== b.id))
+                    await update($, selected, ids => (ids ?? []).filter(x => x !== b.id))
+                    if (b.pinned) $.ui.invalidate('prompt.section')
+                  }}
+                />
+              </Box>
+            </Box>
+          )
+        })}
         {matching.length > shown.length && <Text dimColor>+{matching.length - shown.length} older</Text>}
       </Box>
     )
